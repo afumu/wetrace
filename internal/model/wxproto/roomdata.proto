@@ -1,0 +1,16 @@
+// v3 & v4 通用，可能会有部分字段差异
+syntax = "proto3";
+package app.protobuf;
+option go_package=".;wxproto";
+
+message RoomData {
+  repeated RoomDataUser users = 1;
+  optional int32 roomCap = 5;  // 只在第一份数据中出现，值为500
+}
+
+message RoomDataUser {
+  string userName = 1;  // 用户ID或名称
+  optional string displayName = 2;  // 显示名称，可能是UTF-8编码的中文，部分记录可能为空
+  int32 status = 3;  // 状态码，值范围0-9
+  optional string inviter = 4;  // 邀请人
+}

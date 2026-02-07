@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天记录导出</title>
+    <!-- CSS_PLACEHOLDER -->
+    <style>
+        :root { 
+            --background: 0 0% 100%; --foreground: 222.2 84% 4.9%; --border: 214.3 31.8% 91.4%; --muted: 210 40% 96.1%; --muted-foreground: 215.4 16.3% 46.9%; 
+            --chat-self-bg: #95ec69; --chat-other-bg: #ffffff; --radius: 6px;
+        }
+        body { margin: 0; background-color: #f5f5f5; font-family: "Microsoft YaHei", -apple-system, system-ui, sans-serif; height: 100vh; overflow: hidden; }
+        #app { max-width: 1000px; margin: 0 auto; height: 100vh; background: #ededed; display: flex; flex-direction: column; }
+        .header { height: 60px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid rgba(0,0,0,0.05); background: #ededed; justify-content: center; shrink-0; }
+        .msg-container { flex: 1; overflow-y: auto; padding: 20px 30px; scrollbar-width: thin; }
+        .msg-list { display: flex; flex-direction: column; gap: 4px; }
+        
+        .time-divider { display: flex; justify-content: center; margin: 30px 0 20px; }
+        .time-tag { color: #b2b2b2; font-size: 12px; }
+        
+        .emoji { height: 1.4em; width: auto; vertical-align: text-bottom; display: inline-block; margin: 0 1px; }
+        #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; cursor: pointer; }
+        #lightbox img { max-width: 95%; max-height: 95%; object-fit: contain; }
+
+        .bubble { position: relative; border-radius: var(--radius); box-shadow: 0 1px 2px rgba(0,0,0,0.05); max-width: 100%; }
+        .bubble-text { padding: 10px 12px; font-size: 14.5px; line-height: 1.6; word-wrap: break-word; min-height: 40px; box-sizing: border-box; display: flex; align-items: center; }
+        
+        .bubble::after { content: ""; position: absolute; top: 14px; width: 0; height: 0; border: 6px solid transparent; }
+        .bubble-other { background-color: var(--chat-other-bg); }
+        .bubble-other::after { left: -11px; border-right-color: var(--chat-other-bg); }
+        .bubble-self { background-color: var(--chat-self-bg); }
+        .bubble-self::after { right: -11px; border-left-color: var(--chat-self-bg); }
+
+        .avatar { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: #fff; flex-shrink: 0; }
+        .msg-row { display: flex; margin-bottom: 16px; width: 100%; }
+        .msg-row-self { flex-direction: row-reverse; }
+        .msg-content-wrapper { display: flex; flex-direction: column; max-width: 75%; }
+        .msg-row-self .msg-content-wrapper { align-items: flex-end; margin-right: 12px; }
+        .msg-row-other .msg-content-wrapper { align-items: flex-start; margin-left: 12px; }
+        .sender-name { font-size: 12px; color: #888; margin-bottom: 4px; }
+        
+        .media-content { border-radius: var(--radius); overflow: hidden; display: block; border: 1px solid rgba(0,0,0,0.05); }
+        img.media-content, video.media-content { max-width: 100%; max-height: 450px; }
+
+        .card { width: 250px; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: var(--radius); overflow: hidden; cursor: pointer; transition: background 0.2s; }
+        .card:hover { background: #fcfcfc; }
+        .red-packet { width: 240px; border: none; }
+        .red-packet-top { background: #fa9e3b; padding: 12px; display: flex; align-items: center; gap: 12px; }
+        .red-packet-bottom { background: #fff; padding: 6px 12px; font-size: 11px; color: #888; }
+
+        .playing svg { animation: voice-wave 1s infinite; color: #07c160; }
+        @keyframes voice-wave { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+        /* 引用消息样式 */
+        .refer-box { 
+            margin: 0px 12px 8px; 
+            padding: 8px 10px; 
+            background: rgba(0,0,0,0.04); 
+            border-radius: 4px; 
+            font-size: 12px; 
+            line-height: 1.4; 
+            color: #7a7a7a;
+            border-left: 2px solid rgba(0,0,0,0.1);
+            word-break: break-all;
+        }
+        .bubble-self .refer-box { background: rgba(0,0,0,0.06); border-left-color: rgba(0,0,0,0.15); }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header class="header"><h1 id="chat-title" class="text-[16px] font-medium text-[#1a1a1a]">聊天记录</h1></header>
+        <div class="msg-container" id="scroll-area"><div id="msg-list" class="msg-list"></div></div>
+    </div>
+    <div id="lightbox" onclick="this.style.display='none'"><img id="lb-img"></div>
+    
+    <script src="data.js"></script>
+    <script>
+        const container = document.getElementById('msg-list');
+        let currentAudio = null;
+        let currentAudioEl = null;
+
+        function playVoice(url, el) {
+            console.log('Playing voice:', url);
+            const encodedUrl = encodeURI(url);
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudioEl.classList.remove('playing');
+                if (currentAudio.src.endsWith(encodedUrl)) {
+                    currentAudio = null;
+                    return;
+                }
+            }
+            const audio = new Audio(encodedUrl);
+            audio.onerror = (e) => console.error('Audio load error:', e);
+            audio.play().catch(e => console.error('Audio play error:', e));
+            el.classList.add('playing');
+            currentAudio = audio;
+            currentAudioEl = el;
+            audio.onended = () => {
+                el.classList.remove('playing');
+                currentAudio = null;
+            };
+        }
+
+        function formatMessageTime(ts) {
+            if (!ts) return '';
+            const date = new Date(typeof ts === 'string' ? ts : (ts < 10000000000 ? ts * 1000 : ts));
+            const now = new Date();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const mins = String(date.getMinutes()).padStart(2, '0');
+            if (date.toDateString() === now.toDateString()) return hours + ':' + mins;
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            if (date.toDateString() === yesterday.toDateString()) return '昨天 ' + hours + ':' + mins;
+            if (date.getFullYear() === now.getFullYear()) return (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + hours + ':' + mins;
+            return date.getFullYear() + '年' + (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + hours + ':' + mins;
+        }
+
+        function render() {
+            const messages = window.CHAT_DATA || [];
+            let lastTs = 0;
+            let html = '';
+            messages.forEach(msg => {
+                const currentTs = new Date(msg.time || msg.createTime).getTime();
+                if (currentTs - lastTs > 5 * 60 * 1000) {
+                    html += `<div class="time-divider"><span class="time-tag">${formatMessageTime(msg.time || msg.createTime)}</span></div>`;
+                    lastTs = currentTs;
+                }
+                html += renderMessage(msg);
+            });
+            container.innerHTML = html;
+        }
+
+        function renderMessage(msg) {
+            const isSelf = msg.isSelf;
+            const avatar = msg.smallHeadURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(msg.senderName || 'U');
+            if (msg.type === 10000 || (msg.type === 49 && msg.subType === 62)) {
+                return `<div class="flex justify-center my-4"><span class="text-[12px] text-[#b2b2b2]">${msg.content}</span></div>`;
+            }
+            const isCustom = (msg.type === 49 && [4, 5, 6, 2000, 2001].includes(msg.subType)) || msg.type === 47 || msg.type === 3 || msg.type === 43;
+            return `<div class="msg-row ${isSelf ? 'msg-row-self' : 'msg-row-other'}">
+                <img src="${avatar}" class="avatar">
+                <div class="msg-content-wrapper">
+                    ${!isSelf ? `<span class="sender-name">${msg.senderName || msg.sender}</span>` : ''}
+                    <div class="${!isCustom ? 'bubble ' + (isSelf ? 'bubble-self' : 'bubble-other') : ''}">${renderContent(msg)}</div>
+                </div>
+            </div>`;
+        }
+
+        function renderContent(msg) {
+            const contents = msg.contents || {};
+            const url = contents._url || '';
+            const safeUrl = encodeURI(url);
+
+            switch(msg.type) {
+                case 1: return `<div class="bubble-text">${formatEmoji(msg.content || '')}</div>`;
+                case 3: return `<img src="${safeUrl}" class="media-content cursor-zoom-in" onclick="zoom('${safeUrl}')">`;
+                case 43: return `<video src="${safeUrl}" controls class="media-content bg-black"></video>`;
+                case 34: 
+                    const dur = Math.round((msg.duration || contents.duration || 0) / 1000) || 1;
+                    return `<div class="bubble-text" style="width: ${Math.min(60 + dur*6, 180)}px; cursor: pointer;" onclick="playVoice('${url}', this)">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+                        <span style="margin-left: 8px;">${dur}"</span>
+                    </div>`;
+                case 47: 
+                    if (!url) return `<div class="bubble-text text-[#b2b2b2]">[动画表情]</div>`;
+                    return `<img src="${safeUrl}" style="max-width: 120px; border-radius: 4px;" onerror="this.outerHTML='<div class=\'bubble-text text-[#b2b2b2]\'>[图片表情]</div>'">`;
+                case 49:
+                    if (msg.subType === 19) {
+                        return `<div class="card" style="width: 240px;">
+                            <div style="padding: 12px;">
+                                <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;" class="line-clamp-1">${contents.title || '聊天记录'}</div>
+                                <div style="font-size: 12px; color: #888; line-height: 1.5; white-space: pre-wrap;">${(contents.desc || '').substring(0, 100)}</div>
+                            </div>
+                            <div style="padding: 6px 12px; border-top: 1px solid rgba(0,0,0,0.03); font-size: 11px; color: #b2b2b2;">聊天记录</div>
+                        </div>`;
+                    }
+                    if (msg.subType === 57) {
+                        const refer = contents.refer || {};
+                        let referText = refer.content || '';
+                        if (!referText) {
+                            const types = { 3: '[图片]', 43: '[视频]', 34: '[语音]', 47: '[动画表情]', 49: '[文件]' };
+                            referText = types[refer.type] || '[消息]';
+                        } else if (refer.type === 47) {
+                            referText = '[动画表情]';
+                        }
+                        return `<div>
+                            <div class="bubble-text">${formatEmoji(msg.content || '')}</div>
+                            <div class="refer-box">${refer.senderName || '未知'}: ${formatEmoji(referText)}</div>
+                        </div>`;
+                    }
+                    if ([4,5].includes(msg.subType)) {
+                        return `<div class="card" onclick="window.open('${contents.url}', '_blank')"><div style="padding: 12px;"><div style="font-size: 14px; font-weight: 500; margin-bottom: 8px;" class="line-clamp-2">${contents.title}</div><div style="display: flex; gap: 8px;"><div style="font-size: 11px; color: #888; flex: 1;" class="line-clamp-2">${contents.desc || ''}</div>${url ? `<img src="${safeUrl}" style="width: 40px; height: 40px; border-radius: 2px; object-fit: cover;">` : ''}</div></div></div>`;
+                    }
+                    if (msg.subType === 6) {
+                        return `<div class="card" onclick="window.open('${safeUrl}', '_blank')"><div style="padding: 12px; display: flex; align-items: center; gap: 12px;"><div style="width: 40px; height: 40px; background: #f5f5f5; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#999" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></div><div style="flex: 1; min-width: 0;"><div style="font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${contents.title || '文件'}</div><div style="font-size: 11px; color: #888;">${contents.size ? (contents.size / 1024).toFixed(1) + ' KB' : '文件'}</div></div></div></div>`;
+                    }
+                    if (msg.subType === 2001 || msg.subType === 2000) {
+                        const isRP = msg.subType === 2001;
+                        return `<div class="red-packet" style="border-radius: var(--radius); overflow: hidden;"><div class="red-packet-top" style="background: #fa9d3b;"><div style="width: 36px; height: 42px; background: #e75e58; border-radius: 2px; display: flex; align-items: center; justify-content: center;">${isRP ? '<div style="width: 14px; height: 14px; background: #f8d757; color: #e75e58; border-radius: 50%; font-size: 9px; font-weight: bold; display: flex; align-items: center; justify-content: center;">￥</div>' : '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="white" stroke-width="2"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>'}</div><div style="color: #fff; font-size: 15px; font-weight: 500;" class="line-clamp-1">${isRP ? (msg.content || '恭喜发财，大吉大利') : (msg.content || '转账').replace(/^\[|\]$/g, '')}</div></div><div class="red-packet-bottom">微信${isRP ? '红包' : '转账'}</div></div>`;
+                    }
+                    return `<div class="bubble bubble-other" style="padding: 10px 12px; font-size: 14px; color: #888;">[附件] ${msg.content}</div>`;
+                default: return `<div class="bubble bubble-other" style="padding: 10px 12px; font-size: 14px; color: #888;">[${msg.type}] ${msg.content}</div>`;
+            }
+        }
+
+        function formatEmoji(text) {
+            return text.replace(/\[([^\]]+)\]/g, (match, name) => {
+                return `<img src="assets/face/${name}.png" class="emoji" alt="${name}" onerror="tryOther(this, '${name}', 0)">`;
+            });
+        }
+
+        window.tryOther = function(img, name, idx) {
+            const categories = ['animal', 'blessing', 'gesture', 'other'];
+            if (idx < categories.length) {
+                img.onerror = () => tryOther(img, name, idx + 1);
+                img.src = 'assets/' + categories[idx] + '/' + name + '.png';
+            } else {
+                img.outerHTML = '[' + name + ']';
+            }
+        }
+
+        function zoom(src) {
+            const lb = document.getElementById('lightbox');
+            document.getElementById('lb-img').src = src;
+            lb.style.display = 'flex';
+        }
+
+        render();
+    </script>
+</body>
+</html>

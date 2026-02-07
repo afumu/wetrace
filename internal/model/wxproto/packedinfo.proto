@@ -1,0 +1,19 @@
+syntax = "proto3";
+package app.protobuf;
+option go_package=".;wxproto";
+
+message PackedInfo {
+  uint32 type = 1;        // 始终为 106 (0x6a)
+  uint32 version = 2;     // 始终为 14 (0xe)
+  ImageHash image = 3;    // 图片哈希
+  VideoHash video = 4;    // 视频哈希
+}
+
+
+message ImageHash {
+  string md5 = 4;        // 32 字符的 MD5 哈希
+}
+
+message VideoHash {
+  string md5 = 8;        // 32 字符的 MD5 哈希
+}
