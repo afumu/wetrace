@@ -46,3 +46,20 @@ func (a *API) GetSessions(c *gin.Context) {
 	// 4. 发送成功响应
 	transport.SendSuccess(c, sessions)
 }
+
+// DeleteSession 处理删除会话的请求。
+func (a *API) DeleteSession(c *gin.Context) {
+	username := c.Param("id")
+	if username == "" {
+		transport.BadRequest(c, "缺少会话 ID")
+		return
+	}
+
+	if err := a.Store.DeleteSession(c.Request.Context(), username); err != nil {
+		log.Error().Err(err).Str("username", username).Msg("删除会话失败")
+		transport.InternalServerError(c, "删除会话失败")
+		return
+	}
+
+	transport.SendSuccess(c, nil)
+}

@@ -28,6 +28,7 @@ func (s *Service) setupRoutes() {
 
 		// 会话路由
 		v1.GET("/sessions", s.api.GetSessions)
+		v1.DELETE("/sessions/:id", s.api.DeleteSession)
 
 		// 总览路由
 		v1.GET("/dashboard", s.api.GetDashboard)

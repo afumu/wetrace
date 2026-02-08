@@ -19,6 +19,7 @@ type Store interface {
 	GetContacts(ctx context.Context, query types.ContactQuery) ([]*model.Contact, error)
 	GetChatRooms(ctx context.Context, query types.ChatRoomQuery) ([]*model.ChatRoom, error)
 	GetSessions(ctx context.Context, query types.SessionQuery) ([]*model.Session, error)
+	DeleteSession(ctx context.Context, username string) error
 
 	// 媒体操作
 	GetMedia(ctx context.Context, mediaType string, key string) (*model.Media, error)

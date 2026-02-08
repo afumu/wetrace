@@ -4,8 +4,12 @@ export function useChat() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTalker = searchParams.get('talker')
 
-  const setActiveTalker = (talker: string) => {
-    setSearchParams({ talker })
+  const setActiveTalker = (talker: string | null) => {
+    if (talker) {
+      setSearchParams({ talker })
+    } else {
+      setSearchParams({})
+    }
   }
 
   return {

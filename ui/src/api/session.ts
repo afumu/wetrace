@@ -98,5 +98,9 @@ export const sessionApi = {
     // Assuming REST convention for detail
     const response = await request.get<SessionApiResponse>(`/api/v1/sessions/${encodeURIComponent(talker)}`)
     return transformSession(response)
+  },
+
+  deleteSession: async (talker: string) => {
+    return await request.delete(`/api/v1/sessions/${encodeURIComponent(talker)}`)
   }
 }

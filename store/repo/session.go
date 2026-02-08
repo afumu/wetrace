@@ -45,6 +45,30 @@ func (r *Repository) GetSessions(ctx context.Context, q types.SessionQuery) ([]*
 	return sessions, nil
 }
 
+// DeleteSession 删除会话
+func (r *Repository) DeleteSession(ctx context.Context, username string) error {
+	dbPath, err := r.router.GetSessionDBPath()
+	if err != nil {
+		return err
+	}
+	db, err := r.pool.GetConnection(dbPath)
+	if err != nil {
+		return err
+	}
+
+	var query string
+	if r.isTableExist(db, "SessionTable") {
+		// V4
+		query = "DELETE FROM SessionTable WHERE username = ?"
+	} else {
+		// V3
+		query = "DELETE FROM Session WHERE strUsrName = ?"
+	}
+
+	_, err = db.ExecContext(ctx, query, username)
+	return err
+}
+
 // queryRawSessions 根据数据库版本路由并执行查询
 func (r *Repository) queryRawSessions(ctx context.Context, db *sql.DB, q types.SessionQuery) ([]*model.Session, error) {
 	if r.isTableExist(db, "SessionTable") {

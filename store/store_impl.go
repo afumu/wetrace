@@ -93,6 +93,10 @@ func (s *DefaultStore) GetSessions(ctx context.Context, query types.SessionQuery
 	return s.repo.GetSessions(ctx, query)
 }
 
+func (s *DefaultStore) DeleteSession(ctx context.Context, username string) error {
+	return s.repo.DeleteSession(ctx, username)
+}
+
 func (s *DefaultStore) GetMedia(ctx context.Context, mediaType string, key string) (*model.Media, error) {
 	return s.repo.GetMedia(ctx, mediaType, key)
 }

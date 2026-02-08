@@ -3,19 +3,21 @@ import { cn } from "@/lib/utils"
 import { formatSessionTime } from "@/lib/date"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { EmojiText } from "./EmojiText"
+import { Trash2 } from "lucide-react"
 
 interface SessionItemProps {
   session: Session
   isActive?: boolean
   onClick?: () => void
+  onDelete?: (e: React.MouseEvent) => void
 }
 
-export function SessionItem({ session, isActive, onClick }: SessionItemProps) {
+export function SessionItem({ session, isActive, onClick, onDelete }: SessionItemProps) {
   return (
     <div
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors rounded-lg mx-2",
+        "group flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors rounded-lg mx-2 relative",
         isActive && "bg-accent"
       )}
     >
@@ -35,7 +37,7 @@ export function SessionItem({ session, isActive, onClick }: SessionItemProps) {
         <div className="flex justify-between items-start mb-1">
           <EmojiText 
             text={session.name || session.talkerName || ""} 
-            className="font-medium truncate text-sm text-foreground block" 
+            className="font-medium truncate text-sm text-foreground block pr-6" 
           />
           <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
             {session.lastMessage ? formatSessionTime(session.lastMessage.createTime) : ''}
@@ -48,6 +50,19 @@ export function SessionItem({ session, isActive, onClick }: SessionItemProps) {
           />
         </div>
       </div>
+
+      {onDelete && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(e)
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+          title="删除会话"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
     </div>
   )
 }

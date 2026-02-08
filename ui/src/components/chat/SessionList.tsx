@@ -5,13 +5,31 @@ import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
 import { Virtuoso } from "react-virtuoso"
 import { useChat } from "@/hooks/useChat"
+import { useQueryClient } from "@tanstack/react-query"
+import { sessionApi } from "@/api/session"
 
 export function SessionList() {
   const [search, setSearch] = useState("")
   const { activeTalker, setActiveTalker } = useChat()
+  const queryClient = useQueryClient()
   
   // TODO: Add debounce for search
   const { data: sessions = [], isLoading } = useSessions()
+
+  const handleDelete = async (talker: string) => {
+    if (confirm("确定要删除该会话吗？这可能会从本地数据库中移除该会话。")) {
+      try {
+        await sessionApi.deleteSession(talker)
+        if (activeTalker === talker) {
+          setActiveTalker(null)
+        }
+        queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      } catch (error) {
+        console.error("Failed to delete session:", error)
+        alert("删除会话失败")
+      }
+    }
+  }
 
   // Client-side filter for demo if API search isn't fully integrated yet
   const filteredSessions = sessions.filter(s => {
@@ -54,6 +72,7 @@ export function SessionList() {
                   session={session} 
                   isActive={activeTalker === session.talker}
                   onClick={() => setActiveTalker(session.talker)}
+                  onDelete={() => handleDelete(session.talker)}
                 />
               </div>
             )}

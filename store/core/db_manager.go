@@ -52,8 +52,8 @@ func (p *ConnectionPool) GetConnection(path string) (*sql.DB, error) {
 
 // openNewConnection 封装底层的 SQL 打开逻辑 (单一职责：创建)
 func (p *ConnectionPool) openNewConnection(path string) (*sql.DB, error) {
-	// 使用只读模式 (mode=ro) 和共享缓存 (cache=shared)
-	dsn := fmt.Sprintf("file:%s?mode=ro&cache=shared", path)
+	// 使用读写模式 (mode=rw) 和共享缓存 (cache=shared)
+	dsn := fmt.Sprintf("file:%s?mode=rw&cache=shared", path)
 
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
