@@ -215,7 +215,7 @@ function MonthlyTrendChart({ data }: { data: AnnualReport["monthly_trend"] }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
+        <div className="h-[300px] w-full" style={{ minWidth: 0, minHeight: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -296,7 +296,7 @@ function WeekdayChart({ data }: { data: AnnualReport["weekday_distribution"] }) 
         <CardTitle className="text-base">星期分布</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[250px]">
+        <div className="h-[250px] w-full" style={{ minWidth: 0, minHeight: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -328,7 +328,7 @@ function HourlyChart({ data }: { data: AnnualReport["hourly_distribution"] }) {
         <CardTitle className="text-base">24小时分布</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[250px]">
+        <div className="h-[250px] w-full" style={{ minWidth: 0, minHeight: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -370,7 +370,7 @@ function MessageTypesChart({ types }: { types: Record<string, number> }) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col md:flex-row items-center gap-8">
-          <div className="h-[250px] w-[250px]">
+          <div className="h-[250px] w-[250px]" style={{ minWidth: 0, minHeight: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

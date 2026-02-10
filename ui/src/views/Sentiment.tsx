@@ -356,7 +356,7 @@ function SentimentDistributionChart({
         <CardTitle className="text-base">情感分布</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[200px]">
+        <div className="h-[200px] w-full" style={{ minWidth: 0, minHeight: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -454,7 +454,7 @@ function EmotionTimelineChart({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[250px]">
+        <div className="h-[250px] w-full" style={{ minWidth: 0, minHeight: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -465,7 +465,7 @@ function EmotionTimelineChart({
                 tickFormatter={(v) => `${v}`}
               />
               <Tooltip
-                formatter={(v) => [`${v} 分`, "情感得分"]}
+                formatter={(v) => `${v} 分`}
               />
               <Line
                 type="monotone"
