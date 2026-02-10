@@ -13,6 +13,7 @@ import (
 	"github.com/afumu/wetrace/internal/ai"
 	"github.com/afumu/wetrace/internal/backup"
 	"github.com/afumu/wetrace/internal/monitor"
+	"github.com/afumu/wetrace/internal/replay"
 	intsync "github.com/afumu/wetrace/internal/sync"
 	"github.com/afumu/wetrace/store"
 	"github.com/afumu/wetrace/store/types"

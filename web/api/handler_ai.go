@@ -485,7 +485,7 @@ func (a *API) AISummary(c *gin.Context) {
 	for _, m := range msgs {
 		if m.Type == 1 {
 			sb.WriteString(fmt.Sprintf("[%s] %s: %s\n",
-				m.CreateTime.Format("01-02 15:04"), m.SenderName, m.Content))
+				m.Time.Format("01-02 15:04"), m.SenderName, m.Content))
 		}
 	}
 
@@ -566,7 +566,7 @@ func (a *API) AIExtractTodos(c *gin.Context) {
 	for _, m := range msgs {
 		if m.Type == 1 {
 			sb.WriteString(fmt.Sprintf("[%s] %s: %s\n",
-				m.CreateTime.Format("2006-01-02 15:04"), m.SenderName, m.Content))
+				m.Time.Format("2006-01-02 15:04"), m.SenderName, m.Content))
 		}
 	}
 
@@ -654,7 +654,7 @@ func (a *API) AIExtractInfo(c *gin.Context) {
 	for _, m := range msgs {
 		if m.Type == 1 {
 			sb.WriteString(fmt.Sprintf("[%s] %s: %s\n",
-				m.CreateTime.Format("2006-01-02 15:04"), m.SenderName, m.Content))
+				m.Time.Format("2006-01-02 15:04"), m.SenderName, m.Content))
 		}
 	}
 
