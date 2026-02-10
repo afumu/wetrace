@@ -3,7 +3,7 @@ import { MessageList } from "@/components/chat/MessageList"
 import { useAppStore } from "@/stores/app"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/hooks/useChat"
-import { RefreshCw, ArrowLeft, Smile, PlusCircle, Mic, Download, Sparkles, ImageIcon, BrainCircuit, MessageSquareQuote } from "lucide-react"
+import { RefreshCw, ArrowLeft, Smile, PlusCircle, Mic, Download, Sparkles, ImageIcon, Images, BrainCircuit, MessageSquareQuote } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { systemApi, mediaApi } from "@/api"
 import { toast } from "sonner"
@@ -15,6 +15,7 @@ import { AnalysisPanel } from "@/components/analysis/AnalysisPanel"
 import { ExportModal } from "@/components/chat/ExportModal"
 import { AISummaryModal } from "@/components/ai/AISummaryModal"
 import { AISimulateChat } from "@/components/ai/AISimulateChat"
+import { SessionGalleryModal } from "@/components/chat/SessionGalleryModal"
 
 export default function Chat() {
   const isMobile = useAppStore((state) => state.isMobile)
@@ -28,6 +29,7 @@ export default function Chat() {
   const [aiSummary, setAiSummary] = useState("")
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [showAISimulate, setShowAISimulate] = useState(false)
+  const [showSessionGallery, setShowSessionGallery] = useState(false)
 
   const isGroupChat = useMemo(() => {
     return activeTalker?.endsWith('@chatroom')
@@ -208,9 +210,20 @@ export default function Chat() {
                   <span className="text-xs">加载图片</span>
                 </Button>
 
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-primary"
+                  onClick={() => setShowSessionGallery(true)}
+                  title="查看会话所有图片"
+                >
+                  <Images className="w-4 h-4" />
+                  <span className="text-xs">查看图片</span>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="gap-2 text-muted-foreground hover:text-primary"
                   onClick={() => setShowExportModal(true)}
                   title="导出聊天记录"
@@ -292,13 +305,22 @@ export default function Chat() {
         onExport={handleExportRequest}
       />
 
-      <AISummaryModal 
+      <AISummaryModal
         isOpen={showAISummary}
         onClose={() => setShowAISummary(false)}
         summary={aiSummary}
         isLoading={isSummarizing}
         onSummarize={handleAISummarize}
       />
+
+      {activeTalker && (
+        <SessionGalleryModal
+          talker={activeTalker}
+          displayName={displayName}
+          isOpen={showSessionGallery}
+          onClose={() => setShowSessionGallery(false)}
+        />
+      )}
     </div>
   )
 }

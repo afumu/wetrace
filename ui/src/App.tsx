@@ -17,6 +17,7 @@ import ReplayView from '@/views/ReplayView'
 import { PaymentModal } from '@/components/PaymentModal'
 import { AgreementModal } from '@/components/AgreementModal'
 import { ComplianceDialog } from '@/components/ComplianceDialog'
+import { PasswordDialog } from '@/components/PasswordDialog'
 import { systemApi } from '@/api'
 import { Toaster } from 'sonner'
 
@@ -27,6 +28,7 @@ function App() {
   const setMobile = useAppStore((state) => state.setMobile)
   const [agreed, setAgreed] = useState<boolean | null>(null)
   const [complianceAgreed, setComplianceAgreed] = useState<boolean | null>(null)
+  const [passwordLocked, setPasswordLocked] = useState<boolean | null>(null)
 
   useEffect(() => {
     // Check agreement status
@@ -37,6 +39,11 @@ function App() {
     systemApi.getCompliance()
       .then((data) => setComplianceAgreed(data.agreed))
       .catch(() => setComplianceAgreed(true)) // fallback: skip if API unavailable
+
+    // Check password protection status
+    systemApi.getPasswordStatus()
+      .then((data) => setPasswordLocked(data.enabled && data.is_locked))
+      .catch(() => setPasswordLocked(false)) // fallback: skip if API unavailable
 
     // Initialize theme
     const isDark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -62,13 +69,16 @@ function App() {
     setAgreed(true)
   }
 
-  if (agreed === null || complianceAgreed === null) return null
+  if (agreed === null || complianceAgreed === null || passwordLocked === null) return null
 
   return (
     <BrowserRouter>
       {!agreed && <AgreementModal onAccept={handleAcceptAgreement} />}
       {agreed && !complianceAgreed && (
         <ComplianceDialog onAgreed={() => setComplianceAgreed(true)} />
+      )}
+      {agreed && complianceAgreed && passwordLocked && (
+        <PasswordDialog onUnlocked={() => setPasswordLocked(false)} />
       )}
       <PaymentModal />
       <Toaster position="top-center" richColors closeButton />

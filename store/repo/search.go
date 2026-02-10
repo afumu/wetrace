@@ -205,12 +205,16 @@ func (r *Repository) searchV4Advanced(ctx context.Context, db *sql.DB, q types.M
 			continue
 		}
 
-		talker := "unknown"
+		talker := ""
 		if strings.HasPrefix(tableName, "Msg_") {
 			md5Hash := strings.TrimPrefix(tableName, "Msg_")
 			if t, ok := talkerMD5Map[md5Hash]; ok {
 				talker = t
 			}
+		}
+		if talker == "" {
+			rows.Close()
+			continue
 		}
 
 		for rows.Next() {

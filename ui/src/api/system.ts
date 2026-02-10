@@ -88,6 +88,11 @@ export interface TTSConfigUpdate {
   format?: string;
 }
 
+export interface AIPromptsResponse {
+  prompts: Record<string, string>;
+  defaults: Record<string, string>;
+}
+
 export const systemApi = {
   decrypt: () => request.post("/api/v1/system/decrypt"),
   getStatus: () => request.get("/api/v1/system/status"),
@@ -107,6 +112,10 @@ export const systemApi = {
   getAIConfig: () => request.get<AIConfig>("/api/v1/system/ai_config"),
   updateAIConfig: (data: AIConfigUpdate) => request.post("/api/v1/system/ai_config", data),
   testAIConfig: () => request.post<{ status: string; model: string; latency_ms: number }>("/api/v1/system/ai_config/test"),
+
+  // AI Prompts
+  getAIPrompts: () => request.get<AIPromptsResponse>("/api/v1/system/ai_prompts"),
+  updateAIPrompts: (prompts: Record<string, string>) => request.post("/api/v1/system/ai_prompts", { prompts }),
 
   // Sync Config
   getSyncConfig: () => request.get<SyncConfig>("/api/v1/system/sync_config"),

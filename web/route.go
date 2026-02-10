@@ -34,6 +34,10 @@ func (s *Service) setupRoutes() {
 			system.POST("/ai_config", s.api.UpdateAIConfig)
 			system.POST("/ai_config/test", s.api.TestAIConfig)
 
+			// AI 提示词配置路由
+			system.GET("/ai_prompts", s.api.GetAIPrompts)
+			system.POST("/ai_prompts", s.api.UpdateAIPrompts)
+
 			// 密码保护路由 (需求6)
 			system.GET("/password/status", s.api.GetPasswordStatus)
 			system.POST("/password/set", s.api.SetPassword)

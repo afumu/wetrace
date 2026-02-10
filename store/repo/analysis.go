@@ -58,7 +58,7 @@ func (r *Repository) queryHourlyStatSingleShard(ctx context.Context, target bind
 }
 
 func (r *Repository) queryV4HourlyStat(ctx context.Context, db *sql.DB, tableName string) ([]*model.HourlyStat, error) {
-	query := fmt.Sprintf("SELECT CAST(strftime('%%H', create_time, 'unixepoch', 'localtime') AS INTEGER) as hour, COUNT(*) as count FROM %s GROUP BY hour", tableName)
+	query := fmt.Sprintf("SELECT CAST(strftime('%%H', create_time, 'unixepoch', 'localtime') AS INTEGER) as hour, COUNT(*) as count FROM %s WHERE local_type != 10000 GROUP BY hour", tableName)
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func (r *Repository) queryV4HourlyStat(ctx context.Context, db *sql.DB, tableNam
 }
 
 func (r *Repository) queryV3HourlyStat(ctx context.Context, db *sql.DB, target bind.RouteResult) ([]*model.HourlyStat, error) {
-	query := "SELECT CAST(strftime('%%H', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) as hour, COUNT(*) as count FROM MSG WHERE 1=1"
+	query := "SELECT CAST(strftime('%%H', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) as hour, COUNT(*) as count FROM MSG WHERE Type != 10000"
 	var args []interface{}
 	if target.TalkerID != 0 {
 		query += " AND TalkerId = ?"
@@ -131,7 +131,7 @@ func (r *Repository) queryDailyStatSingleShard(ctx context.Context, target bind.
 	hash := md5.Sum([]byte(talker))
 	tableName := "Msg_" + hex.EncodeToString(hash[:])
 	if r.isTableExist(db, tableName) {
-		query := fmt.Sprintf("SELECT strftime('%%Y-%%m-%%d', create_time, 'unixepoch', 'localtime') as date, COUNT(*) as count FROM %s GROUP BY date", tableName)
+		query := fmt.Sprintf("SELECT strftime('%%Y-%%m-%%d', create_time, 'unixepoch', 'localtime') as date, COUNT(*) as count FROM %s WHERE local_type != 10000 GROUP BY date", tableName)
 		rows, err := db.QueryContext(ctx, query)
 		if err != nil {
 			return nil, err
@@ -148,7 +148,7 @@ func (r *Repository) queryDailyStatSingleShard(ctx context.Context, target bind.
 		return stats, nil
 	}
 	// V3 支持
-	query := "SELECT strftime('%Y-%m-%d', CreateTime / 1000, 'unixepoch', 'localtime') as date, COUNT(*) as count FROM MSG WHERE 1=1"
+	query := "SELECT strftime('%Y-%m-%d', CreateTime / 1000, 'unixepoch', 'localtime') as date, COUNT(*) as count FROM MSG WHERE Type != 10000"
 	var args []interface{}
 	if target.TalkerID != 0 {
 		query += " AND TalkerId = ?"
@@ -188,9 +188,9 @@ func (r *Repository) GetWeekdayActivity(ctx context.Context, talker string) ([]*
 		var query string
 		var args []interface{}
 		if r.isTableExist(db, tableName) {
-			query = fmt.Sprintf("SELECT CASE WHEN CAST(strftime('%%w', create_time, 'unixepoch', 'localtime') AS INTEGER) = 0 THEN 7 ELSE CAST(strftime('%%w', create_time, 'unixepoch', 'localtime') AS INTEGER) END as weekday, COUNT(*) as count FROM %s GROUP BY weekday", tableName)
+			query = fmt.Sprintf("SELECT CASE WHEN CAST(strftime('%%w', create_time, 'unixepoch', 'localtime') AS INTEGER) = 0 THEN 7 ELSE CAST(strftime('%%w', create_time, 'unixepoch', 'localtime') AS INTEGER) END as weekday, COUNT(*) as count FROM %s WHERE local_type != 10000 GROUP BY weekday", tableName)
 		} else {
-			query = "SELECT CASE WHEN CAST(strftime('%w', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) = 0 THEN 7 ELSE CAST(strftime('%w', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) END as weekday, COUNT(*) as count FROM MSG WHERE 1=1"
+			query = "SELECT CASE WHEN CAST(strftime('%w', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) = 0 THEN 7 ELSE CAST(strftime('%w', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) END as weekday, COUNT(*) as count FROM MSG WHERE Type != 10000"
 			if target.TalkerID != 0 {
 				query += " AND TalkerId = ?"
 				args = append(args, target.TalkerID)
@@ -233,9 +233,9 @@ func (r *Repository) GetMonthlyActivity(ctx context.Context, talker string) ([]*
 		var query string
 		var args []interface{}
 		if r.isTableExist(db, tableName) {
-			query = fmt.Sprintf("SELECT CAST(strftime('%%m', create_time, 'unixepoch', 'localtime') AS INTEGER) as month, COUNT(*) as count FROM %s GROUP BY month", tableName)
+			query = fmt.Sprintf("SELECT CAST(strftime('%%m', create_time, 'unixepoch', 'localtime') AS INTEGER) as month, COUNT(*) as count FROM %s WHERE local_type != 10000 GROUP BY month", tableName)
 		} else {
-			query = "SELECT CAST(strftime('%m', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) as month, COUNT(*) as count FROM MSG WHERE 1=1"
+			query = "SELECT CAST(strftime('%m', CreateTime / 1000, 'unixepoch', 'localtime') AS INTEGER) as month, COUNT(*) as count FROM MSG WHERE Type != 10000"
 			if target.TalkerID != 0 {
 				query += " AND TalkerId = ?"
 				args = append(args, target.TalkerID)
@@ -278,9 +278,9 @@ func (r *Repository) GetMessageTypeDistribution(ctx context.Context, talker stri
 		var query string
 		var args []interface{}
 		if r.isTableExist(db, tableName) {
-			query = fmt.Sprintf("SELECT local_type as type, COUNT(*) as count FROM %s GROUP BY type", tableName)
+			query = fmt.Sprintf("SELECT local_type as type, COUNT(*) as count FROM %s WHERE local_type != 10000 GROUP BY type", tableName)
 		} else {
-			query = "SELECT Type as type, COUNT(*) as count FROM MSG WHERE 1=1"
+			query = "SELECT Type as type, COUNT(*) as count FROM MSG WHERE Type != 10000"
 			if target.TalkerID != 0 {
 				query += " AND TalkerId = ?"
 				args = append(args, target.TalkerID)
@@ -324,15 +324,16 @@ func (r *Repository) GetMemberActivity(ctx context.Context, talker string) ([]*m
 		if r.isTableExist(db, tableName) {
 			// V4: 统计真实发送者
 			query := fmt.Sprintf(`
-				SELECT 
-					CASE 
-						WHEN m.real_sender_id = 0 THEN ? 
-						WHEN n.user_name IS NOT NULL THEN n.user_name 
-						ELSE 'self' 
-					END as sender, 
-					COUNT(*) as count 
-				FROM %s m 
-				LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid 
+				SELECT
+					CASE
+						WHEN m.real_sender_id = 0 THEN ?
+						WHEN n.user_name IS NOT NULL THEN n.user_name
+						ELSE 'self'
+					END as sender,
+					COUNT(*) as count
+				FROM %s m
+				LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid
+				WHERE m.local_type != 10000
 				GROUP BY sender`, tableName)
 			rows, _ := db.QueryContext(ctx, query, talker)
 			if rows != nil {
@@ -346,7 +347,7 @@ func (r *Repository) GetMemberActivity(ctx context.Context, talker string) ([]*m
 			}
 		} else {
 			// V3: 基础统计（仅能区分自己和对方）
-			query := "SELECT CASE WHEN IsSender = 1 THEN 'self' ELSE StrTalker END as sender, COUNT(*) as count FROM MSG WHERE 1=1"
+			query := "SELECT CASE WHEN IsSender = 1 THEN 'self' ELSE StrTalker END as sender, COUNT(*) as count FROM MSG WHERE Type != 10000"
 			var args []interface{}
 			if target.TalkerID != 0 {
 				query += " AND TalkerId = ?"
@@ -520,10 +521,10 @@ func (r *Repository) GetPersonalTopContacts(ctx context.Context, limit int) ([]*
 			var args []interface{}
 			if r.isTableExist(db, tableName) {
 				// V4: 使用 status = 2 代表发送 (is_self)
-				query = fmt.Sprintf("SELECT CASE WHEN status = 2 THEN 1 ELSE 0 END as is_self, COUNT(*), MAX(create_time) FROM %s GROUP BY is_self", tableName)
+				query = fmt.Sprintf("SELECT CASE WHEN status = 2 THEN 1 ELSE 0 END as is_self, COUNT(*), MAX(create_time) FROM %s WHERE local_type != 10000 GROUP BY is_self", tableName)
 			} else {
 				// V3: 使用 IsSender 代表发送
-				query = "SELECT IsSender, COUNT(*), MAX(CreateTime/1000) FROM MSG WHERE 1=1"
+				query = "SELECT IsSender, COUNT(*), MAX(CreateTime/1000) FROM MSG WHERE Type != 10000"
 				if target.TalkerID != 0 {
 					query += " AND TalkerId = ?"
 					args = append(args, target.TalkerID)
@@ -873,12 +874,16 @@ func (r *Repository) searchV4Global(ctx context.Context, db *sql.DB, q types.Mes
 		}
 
 		// Derive talker from tableName
-		talker := "unknown"
+		talker := ""
 		if strings.HasPrefix(tableName, "Msg_") {
 			md5Hash := strings.TrimPrefix(tableName, "Msg_")
 			if t, ok := talkerMD5Map[md5Hash]; ok {
 				talker = t
 			}
+		}
+		if talker == "" {
+			rows.Close()
+			continue
 		}
 
 		for rows.Next() {

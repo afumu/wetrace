@@ -150,6 +150,11 @@ func (a *API) createBackupFunc(exportSvc *export.Service) backup.BackupFunc {
 		timestamp := time.Now().Format("20060102_150405")
 		outputFile := filepath.Join(backupPath, fmt.Sprintf("backup_%s.zip", timestamp))
 
+		// Use a wide time range to ensure all messages are included.
+		// Zero time causes the shard router to return no results.
+		allStart := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		allEnd := time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
+
 		count := 0
 		for _, sess := range sessions {
 			talker := sess.UserName
@@ -161,9 +166,9 @@ func (a *API) createBackupFunc(exportSvc *export.Service) backup.BackupFunc {
 			var data []byte
 			switch format {
 			case "txt":
-				data, err = exportSvc.ExportChatTxt(ctx, talker, name, time.Time{}, time.Time{})
+				data, err = exportSvc.ExportChatTxt(ctx, talker, name, allStart, allEnd)
 			default:
-				data, err = exportSvc.ExportChat(ctx, talker, name, time.Time{}, time.Time{})
+				data, err = exportSvc.ExportChat(ctx, talker, name, allStart, allEnd)
 			}
 			if err != nil {
 				continue

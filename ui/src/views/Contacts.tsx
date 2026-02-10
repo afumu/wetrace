@@ -1,7 +1,8 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { contactApi } from "@/api"
 import type { Contact } from "@/types"
+import { ContactType } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,6 +12,8 @@ import {
   Search,
   Download,
 } from "lucide-react"
+
+type ContactFilter = "all" | "friend" | "chatroom"
 
 function ExportDropdown({
   onExport,
@@ -44,6 +47,7 @@ export default function ContactsView() {
   const [keyword, setKeyword] = useState("")
   const [searchKeyword, setSearchKeyword] = useState("")
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [contactFilter, setContactFilter] = useState<ContactFilter>("all")
 
   const { data: contacts, isLoading } = useQuery({
     queryKey: ["contacts-list", searchKeyword],
@@ -52,6 +56,13 @@ export default function ContactsView() {
         searchKeyword ? { keyword: searchKeyword } : undefined
       ),
   })
+
+  const filteredContacts = useMemo(() => {
+    if (!contacts) return undefined
+    if (contactFilter === "all") return contacts
+    if (contactFilter === "friend") return contacts.filter(c => c.type === ContactType.Friend)
+    return contacts.filter(c => c.type === ContactType.Chatroom)
+  }, [contacts, contactFilter])
 
   const handleSearch = () => {
     setSearchKeyword(keyword.trim())
@@ -114,10 +125,38 @@ export default function ContactsView() {
           </Button>
         </div>
 
+        {/* Filter tabs */}
+        <div className="flex gap-1 mb-4">
+          {([
+            { value: "all", label: "全部" },
+            { value: "friend", label: "私人好友" },
+            { value: "chatroom", label: "群聊" },
+          ] as const).map((tab) => (
+            <Button
+              key={tab.value}
+              variant={contactFilter === tab.value ? "default" : "outline"}
+              size="sm"
+              className="text-xs"
+              onClick={() => setContactFilter(tab.value)}
+            >
+              {tab.label}
+              {contacts && (
+                <span className="ml-1 opacity-70">
+                  ({tab.value === "all"
+                    ? contacts.length
+                    : tab.value === "friend"
+                      ? contacts.filter(c => c.type === ContactType.Friend).length
+                      : contacts.filter(c => c.type === ContactType.Chatroom).length})
+                </span>
+              )}
+            </Button>
+          ))}
+        </div>
+
         {/* Result count */}
-        {contacts && (
+        {filteredContacts && (
           <div className="text-sm text-muted-foreground mb-4">
-            共 <span className="font-bold text-foreground">{contacts.length}</span> 个联系人
+            共 <span className="font-bold text-foreground">{filteredContacts.length}</span> 个联系人
           </div>
         )}
       </div>
@@ -125,7 +164,7 @@ export default function ContactsView() {
       {/* Contact list */}
       <ScrollArea className="flex-1 px-6">
         <div className="max-w-5xl mx-auto w-full pb-20">
-          <ContactList contacts={contacts} isLoading={isLoading} />
+          <ContactList contacts={filteredContacts} isLoading={isLoading} />
         </div>
       </ScrollArea>
     </div>
@@ -170,12 +209,12 @@ function ContactList({
 
 function ContactCard({ contact }: { contact: Contact }) {
   const displayName = contact.remark || contact.nickname || contact.wxid
-  const typeLabel =
+  const typeConfig =
     contact.type === "chatroom"
-      ? "群聊"
+      ? { label: "群聊", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" }
       : contact.type === "official"
-        ? "公众号"
-        : "好友"
+        ? { label: "公众号", className: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" }
+        : { label: "好友", className: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" }
 
   return (
     <Card className="overflow-hidden border-none shadow-sm bg-card hover:shadow-md hover:ring-1 hover:ring-primary/20 transition-all">
@@ -186,8 +225,8 @@ function ContactCard({ contact }: { contact: Contact }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium truncate">{displayName}</span>
-            <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground flex-shrink-0">
-              {typeLabel}
+            <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 font-medium ${typeConfig.className}`}>
+              {typeConfig.label}
             </span>
           </div>
           <div className="flex items-center gap-3 mt-0.5">

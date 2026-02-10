@@ -255,7 +255,7 @@ func (r *Repository) getAnnualTopContacts(ctx context.Context, start, end time.T
 					rows.Close()
 				}
 			} else {
-				query := "SELECT IsSender, COUNT(*), MAX(CreateTime/1000) FROM MSG WHERE CreateTime >= ? AND CreateTime <= ?"
+				query := "SELECT COALESCE(IsSender, 0), COUNT(*), MAX(CreateTime/1000) FROM MSG WHERE CreateTime >= ? AND CreateTime <= ?"
 				var args []interface{}
 				args = append(args, start.Unix()*1000, end.Unix()*1000)
 				if target.TalkerID != 0 {
@@ -265,7 +265,7 @@ func (r *Repository) getAnnualTopContacts(ctx context.Context, start, end time.T
 					query += " AND StrTalker = ?"
 					args = append(args, target.Talker)
 				}
-				query += " GROUP BY IsSender"
+				query += " GROUP BY COALESCE(IsSender, 0)"
 				rows, err := db.QueryContext(ctx, query, args...)
 				if err == nil {
 					for rows.Next() {

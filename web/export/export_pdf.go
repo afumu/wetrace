@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"time"
 
@@ -26,20 +27,40 @@ const (
 
 // chineseFontPath returns the path to a Chinese-capable font on the current OS.
 func chineseFontPath() string {
-	if runtime.GOOS == "darwin" {
-		return "/System/Library/Fonts/STHeiti Medium.ttc"
+	candidates := []string{}
+
+	switch runtime.GOOS {
+	case "darwin":
+		candidates = []string{
+			"/System/Library/Fonts/STHeiti Medium.ttc",
+			"/System/Library/Fonts/PingFang.ttc",
+			"/Library/Fonts/Arial Unicode.ttf",
+		}
+	case "windows":
+		candidates = []string{
+			"C:\\Windows\\Fonts\\msyh.ttc",
+			"C:\\Windows\\Fonts\\simsun.ttc",
+			"C:\\Windows\\Fonts\\simhei.ttf",
+		}
+	default: // linux
+		candidates = []string{
+			"/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+		}
 	}
-	// Linux / Windows fallbacks
-	candidates := []string{
-		"/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-		"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-		"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-		"C:\\Windows\\Fonts\\msyh.ttc",
-	}
+
 	for _, p := range candidates {
-		return p // just return first candidate; gopdf will error if missing
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
 	}
-	return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+	// Return the first candidate as fallback; gopdf will produce a clear error if missing
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	return ""
 }
 
 // ExportChatPDF exports chat messages as a PDF file.

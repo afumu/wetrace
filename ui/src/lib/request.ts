@@ -54,9 +54,16 @@ service.interceptors.request.use(
     // Dynamic config update
     const apiBaseUrl = getApiBaseUrl()
     if (apiBaseUrl) config.baseURL = apiBaseUrl
-    
+
     const settings = getSettings()
     if (settings.apiTimeout) config.timeout = settings.apiTimeout
+
+    // Attach auth token if present
+    const authToken = localStorage.getItem('auth_token')
+    if (authToken) {
+      config.headers = config.headers || {}
+      config.headers['X-Auth-Token'] = authToken
+    }
     
     // Add default params for GET
     if (config.method?.toLowerCase() === 'get') {

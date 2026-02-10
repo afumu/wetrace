@@ -20,6 +20,8 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
+  MessageSquare,
+  RotateCcw,
 } from "lucide-react"
 
 /* ============================================================
@@ -535,6 +537,116 @@ function BackupConfigSection() {
 }
 
 /* ============================================================
+ * AI Prompts Config Section
+ * ============================================================ */
+const PROMPT_LABELS: Record<string, string> = {
+  summarize: "聊天总结",
+  simulate: "模拟对话",
+  sentiment: "情感分析",
+  summary: "结构化摘要",
+  extract_todos: "待办提取",
+  extract_info: "关键信息抽取",
+}
+
+function AIPromptsSection() {
+  const queryClient = useQueryClient()
+  const [prompts, setPrompts] = useState<Record<string, string>>({})
+  const [defaults, setDefaults] = useState<Record<string, string>>({})
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["ai-prompts"],
+    queryFn: () => systemApi.getAIPrompts(),
+  })
+
+  useEffect(() => {
+    if (data) {
+      setPrompts(data.prompts || {})
+      setDefaults(data.defaults || {})
+    }
+  }, [data])
+
+  const updateMutation = useMutation({
+    mutationFn: (p: Record<string, string>) => systemApi.updateAIPrompts(p),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-prompts"] })
+      toast.success("AI 提示词配置已保存")
+    },
+    onError: (err: Error) => toast.error("保存失败: " + err.message),
+  })
+
+  const handleReset = (key: string) => {
+    if (defaults[key]) {
+      setPrompts((prev) => ({ ...prev, [key]: defaults[key] }))
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-primary" />
+          AI 提示词配置
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <p className="text-xs text-muted-foreground">
+          自定义各 AI 功能的提示词。留空或点击重置将使用默认提示词。
+          模板变量：模拟对话支持 {"{{target_name}}"} 和 {"{{history}}"}；情感分析支持 {"{{monthly_texts}}"}；关键信息抽取支持 {"{{types_hint}}"}。
+        </p>
+
+        {Object.keys(PROMPT_LABELS).map((key) => (
+          <div key={key} className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium leading-none">
+                {PROMPT_LABELS[key]}
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={() => handleReset(key)}
+              >
+                <RotateCcw className="w-3 h-3 mr-1" />
+                重置默认
+              </Button>
+            </div>
+            <textarea
+              className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
+              value={prompts[key] || ""}
+              onChange={(e) =>
+                setPrompts((prev) => ({ ...prev, [key]: e.target.value }))
+              }
+              placeholder={defaults[key]?.slice(0, 100) + "..."}
+            />
+          </div>
+        ))}
+
+        <div className="flex items-center gap-2 pt-2">
+          <Button
+            size="sm"
+            onClick={() => updateMutation.mutate(prompts)}
+            disabled={updateMutation.isPending}
+          >
+            {updateMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+            保存提示词
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+/* ============================================================
  * Main Settings View
  * ============================================================ */
 export default function SettingsView() {
@@ -547,6 +659,7 @@ export default function SettingsView() {
         </div>
 
         <AIConfigSection />
+        <AIPromptsSection />
         <SyncConfigSection />
         <PasswordSection />
         <BackupConfigSection />

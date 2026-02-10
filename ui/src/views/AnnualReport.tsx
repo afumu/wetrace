@@ -201,7 +201,7 @@ function AnnualHighlightsSection({ highlights }: { highlights: AnnualReport["hig
 }
 
 function MonthlyTrendChart({ data }: { data: AnnualReport["monthly_trend"] }) {
-  const chartData = data.map((d) => ({
+  const chartData = (data || []).map((d) => ({
     name: `${d.month}月`,
     count: d.count,
   }))
@@ -245,7 +245,7 @@ function MonthlyTrendChart({ data }: { data: AnnualReport["monthly_trend"] }) {
 }
 
 function TopContactsSection({ contacts }: { contacts: AnnualReport["top_contacts"] }) {
-  const top10 = contacts.slice(0, 10)
+  const top10 = (contacts || []).slice(0, 10)
 
   return (
     <div>
@@ -285,7 +285,7 @@ function TopContactsSection({ contacts }: { contacts: AnnualReport["top_contacts
 }
 
 function WeekdayChart({ data }: { data: AnnualReport["weekday_distribution"] }) {
-  const chartData = data.map((d) => ({
+  const chartData = (data || []).map((d) => ({
     name: WEEKDAY_NAMES[d.weekday] || `Day ${d.weekday}`,
     count: d.count,
   }))
@@ -317,7 +317,7 @@ function WeekdayChart({ data }: { data: AnnualReport["weekday_distribution"] }) 
 }
 
 function HourlyChart({ data }: { data: AnnualReport["hourly_distribution"] }) {
-  const chartData = data.map((d) => ({
+  const chartData = (data || []).map((d) => ({
     name: `${d.hour}时`,
     count: d.count,
   }))
@@ -355,7 +355,7 @@ function MessageTypesChart({ types }: { types: Record<string, number> }) {
   }
   const COLORS = ["#ec4899", "#6366f1", "#06b6d4", "#f59e0b", "#10b981", "#8b5cf6"]
 
-  const pieData = Object.entries(types).map(([key, value], i) => ({
+  const pieData = Object.entries(types || {}).map(([key, value], i) => ({
     name: TYPE_LABELS[key] || key,
     value,
     color: COLORS[i % COLORS.length],

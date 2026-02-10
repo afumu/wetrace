@@ -165,7 +165,7 @@ func (a *API) GetImageList(c *gin.Context) {
 			Talker:       msg.Talker,
 			TalkerName:   msg.TalkerName,
 			Time:         msg.Time.Format(time.RFC3339),
-			ThumbnailURL: fmt.Sprintf("/api/v1/media/image/%s", key),
+			ThumbnailURL: fmt.Sprintf("/api/v1/media/image/%s?thumb=1", key),
 			Seq:          msg.Seq,
 		}
 		allItems = append(allItems, item)

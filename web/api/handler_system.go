@@ -249,6 +249,202 @@ func (a *API) GetCompliance(c *gin.Context) {
 	})
 }
 
+// defaultAIPrompts 返回所有 AI 功能的默认提示词
+func defaultAIPrompts() map[string]string {
+	return map[string]string{
+		"summarize": "以下是一段微信聊天记录，请简要总结对话的核心内容和主要结论：\n\n",
+
+		"simulate": `你现在是一个高级人工智能，你的任务是精准模拟一个名为 "{{target_name}}" 的人的微信聊天风格。
+
+你需要通过分析以下提供的聊天记录，学习并模仿 {{target_name}} 的以下特征：
+1. 语气与口吻：是热情、冷淡、幽默还是严肃？
+2. 常用词汇：是否有特定的口头禅、简称或习惯性用语？
+3. 表情习惯：是否经常使用表情符号（如 [微笑]、[呲牙]）或 Emoji？使用的频率如何？
+4. 回复长度：习惯发长句子还是短句？
+5. 标点符号：是否经常使用标点，还是习惯直接空格？
+
+历史聊天记录（参考上下文）：
+{{history}}
+
+模仿要点：
+- 你现在就是 {{target_name}}。
+- 严禁以 AI 助手的身份说话。
+- 回复内容必须简洁自然，符合微信聊天的即时性。
+- 直接输出回复内容，不要附带任何解释或前缀。`,
+
+		"sentiment": `以下是按月份整理的微信聊天记录，请进行情感分析。
+
+{{monthly_texts}}
+
+请严格按照以下 JSON 格式返回分析结果，不要包含任何其他文字：
+{
+  "overall_score": 0.72,
+  "overall_label": "积极/消极/中立",
+  "relationship_health": "良好/一般/需关注",
+  "summary": "整体分析总结...",
+  "emotion_timeline": [
+    {
+      "period": "2025-01",
+      "score": 0.8,
+      "label": "积极/消极/中立",
+      "keywords": ["关键词1", "关键词2"]
+    }
+  ],
+  "sentiment_distribution": {
+    "positive": 0.58,
+    "neutral": 0.30,
+    "negative": 0.12
+  },
+  "relationship_indicators": {
+    "initiative_ratio": 0.52,
+    "response_speed": "快/中/慢",
+    "intimacy_trend": "上升/稳定/下降"
+  }
+}
+
+说明：
+- overall_score: 0-1之间的情感评分，越高越积极
+- emotion_timeline: 按月份的情绪变化，每个月一条记录
+- initiative_ratio: 主动发起对话的比例（0-1）
+- 所有数值保留两位小数`,
+
+		"summary": `以下是一段微信聊天记录，请生成结构化摘要。要求：
+1. 核心话题：列出讨论的主要话题（不超过5个）
+2. 关键结论：列出达成的共识或结论
+3. 待跟进事项：列出需要后续跟进的事项
+4. 一句话总结：用一句话概括整段对话
+
+请严格按照以下 JSON 格式返回，不要包含其他文字：
+{
+  "topics": ["话题1", "话题2"],
+  "conclusions": ["结论1", "结论2"],
+  "follow_ups": ["跟进事项1", "跟进事项2"],
+  "one_line_summary": "一句话总结"
+}
+
+聊天记录：
+`,
+
+		"extract_todos": `以下是一段微信聊天记录，请从中提取所有待办事项、任务、提醒和承诺。
+包括但不限于：
+- 明确的任务分配（"帮我..."、"你去..."）
+- 时间约定（"明天..."、"下周..."）
+- 承诺和提醒（"记得..."、"别忘了..."）
+- 需要回复或跟进的事项
+
+请严格按照以下 JSON 格式返回，不要包含其他文字：
+{
+  "todos": [
+    {
+      "content": "待办事项描述",
+      "deadline": "截止时间（如有，ISO 8601格式，无则为空字符串）",
+      "priority": "high/medium/low",
+      "source_msg": "原始消息内容",
+      "source_time": "消息时间"
+    }
+  ]
+}
+
+如果没有找到任何待办事项，返回 {"todos": []}
+
+聊天记录：
+`,
+
+		"extract_info": `以下是一段微信聊天记录，请从中提取以下类型的关键信息：{{types_hint}}
+
+提取规则：
+- address: 具体地址、地点、位置信息
+- time: 时间约定、日期安排（非消息本身的时间戳）
+- amount: 金额、价格、费用
+- phone: 电话号码、手机号
+
+请严格按照以下 JSON 格式返回，不要包含其他文字：
+{
+  "extractions": [
+    {
+      "type": "address/time/amount/phone",
+      "value": "提取的具体值",
+      "context": "包含该信息的原始消息",
+      "time": "消息时间"
+    }
+  ]
+}
+
+如果没有找到任何信息，返回 {"extractions": []}
+
+聊天记录：
+`,
+	}
+}
+
+// GetAIPrompts 获取所有 AI 提示词配置
+func (a *API) GetAIPrompts(c *gin.Context) {
+	defaults := defaultAIPrompts()
+	prompts := make(map[string]string, len(defaults))
+
+	for key, defaultVal := range defaults {
+		viperKey := "AI_PROMPT_" + key
+		custom := viper.GetString(viperKey)
+		if custom != "" {
+			prompts[key] = custom
+		} else {
+			prompts[key] = defaultVal
+		}
+	}
+
+	transport.SendSuccess(c, gin.H{
+		"prompts":  prompts,
+		"defaults": defaults,
+	})
+}
+
+// UpdateAIPrompts 更新 AI 提示词配置
+func (a *API) UpdateAIPrompts(c *gin.Context) {
+	var req struct {
+		Prompts map[string]string `json:"prompts"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, "参数错误")
+		return
+	}
+
+	defaults := defaultAIPrompts()
+
+	for key, val := range req.Prompts {
+		if _, ok := defaults[key]; !ok {
+			continue // 忽略未知的 key
+		}
+		viperKey := "AI_PROMPT_" + key
+		if val == "" || val == defaults[key] {
+			// 如果为空或与默认值相同，删除自定义配置
+			viper.Set(viperKey, "")
+		} else {
+			viper.Set(viperKey, val)
+		}
+	}
+
+	if err := viper.WriteConfig(); err != nil {
+		transport.InternalServerError(c, "保存配置失败: "+err.Error())
+		return
+	}
+
+	transport.SendSuccess(c, gin.H{"status": "ok"})
+}
+
+// GetAIPrompt 获取指定 AI 功能的提示词（优先自定义，否则默认）
+func GetAIPrompt(key string) string {
+	viperKey := "AI_PROMPT_" + key
+	custom := viper.GetString(viperKey)
+	if custom != "" {
+		return custom
+	}
+	defaults := defaultAIPrompts()
+	if val, ok := defaults[key]; ok {
+		return val
+	}
+	return ""
+}
+
 // AgreeCompliance 提交合规同意
 func (a *API) AgreeCompliance(c *gin.Context) {
 	var req struct {

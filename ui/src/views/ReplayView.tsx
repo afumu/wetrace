@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { replayApi } from "@/api/replay"
 import { sessionApi } from "@/api/session"
-import type { ReplayMessage } from "@/api/replay"
-import type { Session } from "@/types"
+import type { Session, Message } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,6 +16,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { MessageBubble } from "@/components/chat/MessageBubble"
 
 const SPEED_OPTIONS = [1, 2, 4, 8] as const
 const MAX_INTERVAL_MS = 2000 // cap real interval at 2s
@@ -24,7 +24,7 @@ const MAX_INTERVAL_MS = 2000 // cap real interval at 2s
 /* ============================================================
  * useReplay hook — manages replay state machine
  * ============================================================ */
-function useReplay(messages: ReplayMessage[]) {
+function useReplay(messages: Message[]) {
   const [visibleCount, setVisibleCount] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState<number>(1)
@@ -92,39 +92,6 @@ function useReplay(messages: ReplayMessage[]) {
     reset,
     progress: total > 0 ? (visibleCount / total) * 100 : 0,
   }
-}
-
-/* ============================================================
- * Replay Bubble — simplified message display for replay
- * ============================================================ */
-function ReplayBubble({ msg }: { msg: ReplayMessage }) {
-  const isSelf = msg.isSelf
-  const time = new Date(msg.time)
-  const timeStr = `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`
-
-  return (
-    <div className={cn("flex gap-2 px-4 py-1", isSelf && "flex-row-reverse")}>
-      {/* Avatar placeholder */}
-      <div className="w-8 h-8 rounded-full bg-muted flex-shrink-0 flex items-center justify-center text-xs text-muted-foreground">
-        {(msg.senderName || "?").charAt(0)}
-      </div>
-      <div className={cn("max-w-[70%] flex flex-col", isSelf ? "items-end" : "items-start")}>
-        <span className="text-[10px] text-muted-foreground mb-0.5">
-          {msg.senderName} {timeStr}
-        </span>
-        <div
-          className={cn(
-            "rounded-lg px-3 py-2 text-sm break-words",
-            isSelf
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted"
-          )}
-        >
-          {msg.content || "[非文本消息]"}
-        </div>
-      </div>
-    </div>
-  )
 }
 
 /* ============================================================
@@ -603,7 +570,7 @@ export default function ReplayView() {
         ) : (
           <>
             {messages.slice(0, replay.visibleCount).map((msg, i) => (
-              <ReplayBubble key={msg.seq || i} msg={msg} />
+              <MessageBubble key={msg.seq || i} message={msg} showAvatar showName />
             ))}
           </>
         )}
