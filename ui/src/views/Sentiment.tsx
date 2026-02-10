@@ -188,10 +188,10 @@ function SentimentConfigPanel({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <label className="text-xs text-muted-foreground font-medium leading-none">
               <Calendar className="w-3 h-3 inline mr-1" />
               开始日期 (可选)
-            </Label>
+            </label>
             <Input
               type="date"
               value={startDate}
@@ -200,10 +200,10 @@ function SentimentConfigPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <label className="text-xs text-muted-foreground font-medium leading-none">
               <Calendar className="w-3 h-3 inline mr-1" />
               结束日期 (可选)
-            </Label>
+            </label>
             <Input
               type="date"
               value={endDate}
