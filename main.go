@@ -99,6 +99,11 @@ func main() {
 		WxKeyDllPath:    viper.GetString("WXKEY_DLL_PATH"),
 		WechatPath:      viper.GetString("WXKEY_WECHAT_PATH"),
 		WechatDataPath:  viper.GetString("WXKEY_WECHAT_DATA_PATH"),
+		AIEnabled:       viper.GetBool("AI_ENABLED"),
+		AIProvider:      viper.GetString("AI_PROVIDER"),
+		AIAPIKey:        viper.GetString("AI_API_KEY"),
+		AIBaseURL:       viper.GetString("AI_BASE_URL"),
+		AIModel:         viper.GetString("AI_MODEL"),
 	}
 	webService := web.NewService(newStore, &webConf, staticFS)
 

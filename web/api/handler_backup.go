@@ -56,13 +56,20 @@ func (a *API) UpdateBackupConfig(c *gin.Context) {
 }
 
 // RunBackup manually triggers a backup operation.
+// Accepts optional session_ids in request body to backup specific sessions.
 func (a *API) RunBackup(c *gin.Context) {
 	if a.BackupScheduler == nil {
 		transport.InternalServerError(c, "备份调度器未初始化")
 		return
 	}
 
-	go a.BackupScheduler.RunBackup()
+	var req struct {
+		SessionIDs []string `json:"session_ids"`
+	}
+	// Ignore bind error — body may be empty for backward compatibility
+	_ = c.ShouldBindJSON(&req)
+
+	go a.BackupScheduler.RunBackupWithSessions(req.SessionIDs)
 	transport.SendSuccess(c, gin.H{"status": "backup_started"})
 }
 

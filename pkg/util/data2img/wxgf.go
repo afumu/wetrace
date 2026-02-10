@@ -31,10 +31,10 @@ func init() {
 		FFMpegPath = ffmpegPath
 	} else {
 		// try local ffmpeg
-		if _, err := os.Stat(filepath.Join("ffmepg", "ffmpeg")); err == nil {
-			FFMpegPath = filepath.Join("ffmepg", "ffmpeg")
-		} else if _, err := os.Stat(filepath.Join("ffmepg", "ffmpeg.exe")); err == nil {
-			FFMpegPath = filepath.Join("ffmepg", "ffmpeg.exe")
+		if _, err := os.Stat(filepath.Join("ffmpeg", "ffmpeg")); err == nil {
+			FFMpegPath = filepath.Join("ffmpeg", "ffmpeg")
+		} else if _, err := os.Stat(filepath.Join("ffmpeg", "ffmpeg.exe")); err == nil {
+			FFMpegPath = filepath.Join("ffmpeg", "ffmpeg.exe")
 		}
 	}
 	if isFFmpegAvailable() {

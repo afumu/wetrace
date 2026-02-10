@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/afumu/wetrace/internal/model"
+	"github.com/afumu/wetrace/pkg/util/dat2img"
 	"github.com/afumu/wetrace/store"
 	"github.com/afumu/wetrace/store/types"
 	"github.com/chromedp/chromedp"
@@ -274,7 +275,11 @@ func (e *Exporter) composeOutput(framesDir string, task *ExportTask) (string, er
 		}
 	}
 
-	cmd := exec.Command("ffmpeg", args...)
+	ffmpegBin := dat2img.FFMpegPath
+	if ffmpegBin == "" {
+		ffmpegBin = "ffmpeg"
+	}
+	cmd := exec.Command(ffmpegBin, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("FFmpeg 合成失败: %v, output: %s", err, string(output))

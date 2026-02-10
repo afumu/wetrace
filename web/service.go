@@ -52,6 +52,7 @@ func NewService(store store.Store, conf *Config, staticFS fs.FS) *Service {
 
 	// 创建共享的 API 配置指针
 	apiConf := &api.Config{
+		DataDir:         conf.DataDir,
 		WechatDbSrcPath: conf.WechatDbSrcPath,
 		WechatDbKey:     conf.WechatDbKey,
 		WxKeyDllPath:    conf.WxKeyDllPath,

@@ -121,6 +121,7 @@ export const systemApi = {
   getSyncConfig: () => request.get<SyncConfig>("/api/v1/system/sync_config"),
   updateSyncConfig: (data: SyncConfigUpdate) => request.post("/api/v1/system/sync_config", data),
   triggerSync: () => request.post("/api/v1/system/sync"),
+  getSyncStatus: () => request.get<SyncConfig>("/api/v1/system/sync_status"),
 
   // Password
   getPasswordStatus: () => request.get<PasswordStatus>("/api/v1/system/password/status"),
@@ -134,7 +135,8 @@ export const systemApi = {
   // Backup Config
   getBackupConfig: () => request.get<BackupConfig>("/api/v1/system/backup_config"),
   updateBackupConfig: (data: BackupConfigUpdate) => request.post("/api/v1/system/backup_config", data),
-  runBackup: () => request.post("/api/v1/system/backup/run"),
+  runBackup: (sessionIds?: string[]) =>
+    request.post("/api/v1/system/backup/run", sessionIds?.length ? { session_ids: sessionIds } : {}),
   getBackupHistory: (limit = 20, offset = 0) =>
     request.get<BackupHistoryItem[]>("/api/v1/system/backup/history", { limit, offset }),
 

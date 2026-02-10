@@ -38,6 +38,7 @@ type API struct {
 }
 
 type Config struct {
+	DataDir         string
 	WechatDbSrcPath string
 	WechatDbKey     string
 	WxKeyDllPath    string
@@ -73,6 +74,9 @@ func NewAPI(s store.Store, m *media.Service, conf *Config, staticFS fs.FS) *API 
 		AI:       aiClient,
 		Password: NewPasswordManager(),
 	}
+
+	// Initialize AI prompts JSON file path
+	initPromptsFilePath(conf.DataDir)
 
 	// Initialize sync scheduler
 	syncFunc := func() error {
@@ -133,9 +137,10 @@ func NewAPI(s store.Store, m *media.Service, conf *Config, staticFS fs.FS) *API 
 	return a
 }
 
-// createBackupFunc creates the backup function that exports all sessions.
+// createBackupFunc creates the backup function that exports sessions.
+// When sessionIDs is empty, all sessions are backed up.
 func (a *API) createBackupFunc(exportSvc *export.Service) backup.BackupFunc {
-	return func(backupPath, format string) (string, int, error) {
+	return func(backupPath, format string, sessionIDs []string) (string, int, error) {
 		ctx := context.Background()
 
 		sessions, err := a.Store.GetSessions(ctx, types.SessionQuery{Limit: 100000})
@@ -143,12 +148,27 @@ func (a *API) createBackupFunc(exportSvc *export.Service) backup.BackupFunc {
 			return "", 0, fmt.Errorf("获取会话列表失败: %w", err)
 		}
 
-		if err := os.MkdirAll(backupPath, 0755); err != nil {
-			return "", 0, fmt.Errorf("创建备份目录失败: %w", err)
+		// Filter sessions if sessionIDs is provided
+		if len(sessionIDs) > 0 {
+			idSet := make(map[string]bool, len(sessionIDs))
+			for _, id := range sessionIDs {
+				idSet[id] = true
+			}
+			filtered := sessions[:0]
+			for _, sess := range sessions {
+				if idSet[sess.UserName] {
+					filtered = append(filtered, sess)
+				}
+			}
+			sessions = filtered
 		}
 
+		// Create timestamped subdirectory: backupPath/backup_20250211_150405/
 		timestamp := time.Now().Format("20060102_150405")
-		outputFile := filepath.Join(backupPath, fmt.Sprintf("backup_%s.zip", timestamp))
+		backupDir := filepath.Join(backupPath, fmt.Sprintf("backup_%s", timestamp))
+		if err := os.MkdirAll(backupDir, 0755); err != nil {
+			return "", 0, fmt.Errorf("创建备份目录失败: %w", err)
+		}
 
 		// Use a wide time range to ensure all messages are included.
 		// Zero time causes the shard router to return no results.
@@ -178,7 +198,7 @@ func (a *API) createBackupFunc(exportSvc *export.Service) backup.BackupFunc {
 			if format == "txt" {
 				ext = ".txt"
 			}
-			fname := filepath.Join(backupPath, fmt.Sprintf("%s_%s%s", name, timestamp, ext))
+			fname := filepath.Join(backupDir, fmt.Sprintf("%s_%s%s", name, timestamp, ext))
 			if writeErr := os.WriteFile(fname, data, 0644); writeErr != nil {
 				continue
 			}
@@ -186,9 +206,10 @@ func (a *API) createBackupFunc(exportSvc *export.Service) backup.BackupFunc {
 		}
 
 		// Write a summary marker file as the "output"
+		summaryFile := filepath.Join(backupDir, "summary.txt")
 		summary := fmt.Sprintf("Backup completed at %s, %d sessions exported", timestamp, count)
-		_ = os.WriteFile(outputFile+".txt", []byte(summary), 0644)
+		_ = os.WriteFile(summaryFile, []byte(summary), 0644)
 
-		return outputFile + ".txt", count, nil
+		return backupDir, count, nil
 	}
 }

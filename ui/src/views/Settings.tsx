@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { systemApi } from "@/api"
+import { systemApi, sessionApi } from "@/api"
 import { toast } from "sonner"
 import type {
   AIConfigUpdate,
@@ -22,6 +22,7 @@ import {
   XCircle,
   MessageSquare,
   RotateCcw,
+  Search,
 } from "lucide-react"
 
 /* ============================================================
@@ -413,11 +414,32 @@ function BackupConfigSection() {
     backup_path: "",
     format: "html",
   })
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
+  const [backupAll, setBackupAll] = useState(true)
+  const [sessionSearch, setSessionSearch] = useState("")
 
   const { data: config, isLoading } = useQuery({
     queryKey: ["backup-config"],
     queryFn: () => systemApi.getBackupConfig(),
   })
+
+  // Fetch session list for selective backup
+  const { data: sessionData } = useQuery({
+    queryKey: ["backup-sessions"],
+    queryFn: () => sessionApi.getSessions({ limit: 10000 }),
+  })
+
+  const filteredSessions = useMemo(() => {
+    if (!sessionData?.items) return []
+    if (!sessionSearch.trim()) return sessionData.items
+    const kw = sessionSearch.trim().toLowerCase()
+    return sessionData.items.filter(
+      (s) =>
+        (s.name || "").toLowerCase().includes(kw) ||
+        (s.talkerName || "").toLowerCase().includes(kw) ||
+        s.talker.toLowerCase().includes(kw)
+    )
+  }, [sessionData, sessionSearch])
 
   useEffect(() => {
     if (config) {
@@ -440,10 +462,42 @@ function BackupConfigSection() {
   })
 
   const backupMutation = useMutation({
-    mutationFn: () => systemApi.runBackup(),
+    mutationFn: (sessionIds?: string[]) => systemApi.runBackup(sessionIds),
     onSuccess: () => toast.success("备份任务已启动"),
     onError: (err: Error) => toast.error("备份失败: " + err.message),
   })
+
+  const handleRunBackup = () => {
+    if (backupAll) {
+      backupMutation.mutate(undefined)
+    } else {
+      if (selectedSessionIds.length === 0) {
+        toast.warning("请至少选择一个会话")
+        return
+      }
+      backupMutation.mutate(selectedSessionIds)
+    }
+  }
+
+  const handleToggleSession = (id: string) => {
+    setSelectedSessionIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    )
+  }
+
+  const handleSelectAllFiltered = () => {
+    const ids = filteredSessions.map((s) => s.talker)
+    setSelectedSessionIds((prev) => {
+      const set = new Set(prev)
+      ids.forEach((id) => set.add(id))
+      return Array.from(set)
+    })
+  }
+
+  const handleDeselectAllFiltered = () => {
+    const ids = new Set(filteredSessions.map((s) => s.talker))
+    setSelectedSessionIds((prev) => prev.filter((id) => !ids.has(id)))
+  }
 
   if (isLoading) {
     return (
@@ -512,6 +566,84 @@ function BackupConfigSection() {
           </div>
         )}
 
+        {/* Session selection for manual backup */}
+        <div className="space-y-2 border rounded-md p-3">
+          <label className="text-sm font-medium leading-none">手动备份范围</label>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="backup-scope"
+                checked={backupAll}
+                onChange={() => setBackupAll(true)}
+                className="accent-primary"
+              />
+              备份所有会话
+            </label>
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="backup-scope"
+                checked={!backupAll}
+                onChange={() => setBackupAll(false)}
+                className="accent-primary"
+              />
+              选择会话备份
+            </label>
+          </div>
+
+          {!backupAll && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    value={sessionSearch}
+                    onChange={(e) => setSessionSearch(e.target.value)}
+                    placeholder="搜索会话..."
+                    className="h-8 pl-7 text-xs"
+                  />
+                </div>
+                <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={handleSelectAllFiltered}>
+                  全选
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={handleDeselectAllFiltered}>
+                  取消全选
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                已选择 {selectedSessionIds.length} 个会话
+                {sessionData?.items ? ` / 共 ${sessionData.items.length} 个` : ""}
+              </p>
+              <div className="max-h-48 overflow-y-auto border rounded-md divide-y">
+                {filteredSessions.map((s) => (
+                  <label
+                    key={s.talker}
+                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedSessionIds.includes(s.talker)}
+                      onChange={() => handleToggleSession(s.talker)}
+                      className="accent-primary"
+                    />
+                    <span className="truncate">{s.name || s.talkerName || s.talker}</span>
+                    {s.type && (
+                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                        {s.type === "group" ? "群聊" : s.type === "private" ? "私聊" : s.type === "official" ? "公众号" : ""}
+                      </span>
+                    )}
+                  </label>
+                ))}
+                {filteredSessions.length === 0 && (
+                  <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                    {sessionSearch ? "未找到匹配的会话" : "暂无会话数据"}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2 pt-2">
           <Button
             size="sm"
@@ -524,11 +656,11 @@ function BackupConfigSection() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => backupMutation.mutate()}
+            onClick={handleRunBackup}
             disabled={backupMutation.isPending}
           >
             {backupMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-            立即备份
+            {backupAll ? "立即备份全部" : `立即备份 (${selectedSessionIds.length})`}
           </Button>
         </div>
       </CardContent>

@@ -29,24 +29,26 @@ const (
 func chineseFontPath() string {
 	candidates := []string{}
 
+	// gopdf v0.36.0 only supports .ttf/.otf — .ttc (TrueType Collection) is NOT supported.
 	switch runtime.GOOS {
 	case "darwin":
 		candidates = []string{
-			"/System/Library/Fonts/STHeiti Medium.ttc",
-			"/System/Library/Fonts/PingFang.ttc",
+			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
 			"/Library/Fonts/Arial Unicode.ttf",
 		}
 	case "windows":
 		candidates = []string{
-			"C:\\Windows\\Fonts\\msyh.ttc",
-			"C:\\Windows\\Fonts\\simsun.ttc",
 			"C:\\Windows\\Fonts\\simhei.ttf",
+			"C:\\Windows\\Fonts\\simkai.ttf",
+			"C:\\Windows\\Fonts\\simfang.ttf",
 		}
 	default: // linux
 		candidates = []string{
-			"/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-			"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-			"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/truetype/noto/NotoSansSC-Regular.ttf",
+			"/usr/share/fonts/noto-cjk/NotoSansSC-Regular.ttf",
+			"/usr/share/fonts/opentype/noto/NotoSansSC-Regular.otf",
+			"/usr/share/fonts/truetype/wqy/wqy-zenhei.ttf",
+			"/usr/share/fonts/truetype/wqy/wqy-microhei.ttf",
 			"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 		}
 	}

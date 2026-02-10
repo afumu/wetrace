@@ -117,14 +117,45 @@ export function Sidebar() {
   const handleSync = async () => {
     try {
       setIsSyncing(true)
-      await systemApi.decrypt()
-      toast.success("数据同步成功！")
-      window.location.reload()
+      await systemApi.triggerSync()
+      toast.info("同步已启动，请稍候...")
+
+      // Poll sync status every 1 second, max 60 times (60s timeout)
+      const MAX_POLLS = 60
+      let pollCount = 0
+
+      const pollTimer = setInterval(async () => {
+        pollCount++
+        try {
+          const status = await systemApi.getSyncStatus()
+
+          if (!status.is_syncing) {
+            clearInterval(pollTimer)
+            setIsSyncing(false)
+            if (status.last_sync_status === "success") {
+              toast.success("数据同步成功！")
+              window.location.reload()
+            } else {
+              toast.error("同步失败，请检查日志。")
+            }
+            return
+          }
+
+          if (pollCount >= MAX_POLLS) {
+            clearInterval(pollTimer)
+            setIsSyncing(false)
+            toast.error("同步超时，请稍后重试或检查日志。")
+          }
+        } catch {
+          clearInterval(pollTimer)
+          setIsSyncing(false)
+          toast.error("获取同步状态失败。")
+        }
+      }, 1000)
     } catch (error: any) {
-      console.error("Sync failed:", error)
-      const message = error.message || "同步失败，请检查日志。"
+      console.error("Sync trigger failed:", error)
+      const message = error.message || "启动同步失败，请检查日志。"
       toast.error(message)
-    } finally {
       setIsSyncing(false)
     }
   }

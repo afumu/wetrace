@@ -56,3 +56,12 @@ func (a *API) TriggerSync(c *gin.Context) {
 	go a.SyncScheduler.RunSync()
 	transport.SendSuccess(c, gin.H{"status": "syncing"})
 }
+
+// GetSyncStatus returns the current sync status (used for polling).
+func (a *API) GetSyncStatus(c *gin.Context) {
+	if a.SyncScheduler == nil {
+		transport.SendSuccess(c, gin.H{"is_syncing": false})
+		return
+	}
+	transport.SendSuccess(c, a.SyncScheduler.GetStatus())
+}

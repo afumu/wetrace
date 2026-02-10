@@ -1,6 +1,10 @@
 package api
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/afumu/wetrace/internal/ai"
@@ -9,6 +13,57 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 )
+
+// --- AI Prompts JSON file storage ---
+
+var (
+	promptsFilePath string
+	promptsMu       sync.RWMutex
+)
+
+// initPromptsFilePath sets the package-level prompts JSON file path.
+// Called once from NewAPI during initialization.
+func initPromptsFilePath(dataDir string) {
+	promptsFilePath = filepath.Join(dataDir, "ai_prompts.json")
+}
+
+// loadPromptsFromFile reads custom prompts from the JSON file.
+// Returns an empty map if the file does not exist.
+func loadPromptsFromFile() (map[string]string, error) {
+	promptsMu.RLock()
+	defer promptsMu.RUnlock()
+
+	data, err := os.ReadFile(promptsFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]string), nil
+		}
+		return nil, err
+	}
+
+	var prompts map[string]string
+	if err := json.Unmarshal(data, &prompts); err != nil {
+		return nil, err
+	}
+	return prompts, nil
+}
+
+// savePromptsToFile writes custom prompts to the JSON file.
+func savePromptsToFile(prompts map[string]string) error {
+	promptsMu.Lock()
+	defer promptsMu.Unlock()
+
+	dir := filepath.Dir(promptsFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(prompts, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(promptsFilePath, data, 0644)
+}
 
 // SelectPath 让用户在服务端（本地）选择路径
 func (a *API) SelectPath(c *gin.Context) {
@@ -380,13 +435,18 @@ func defaultAIPrompts() map[string]string {
 // GetAIPrompts 获取所有 AI 提示词配置
 func (a *API) GetAIPrompts(c *gin.Context) {
 	defaults := defaultAIPrompts()
-	prompts := make(map[string]string, len(defaults))
 
+	custom, err := loadPromptsFromFile()
+	if err != nil {
+		transport.InternalServerError(c, "读取提示词文件失败: "+err.Error())
+		return
+	}
+
+	// Merge: custom overrides defaults
+	prompts := make(map[string]string, len(defaults))
 	for key, defaultVal := range defaults {
-		viperKey := "AI_PROMPT_" + key
-		custom := viper.GetString(viperKey)
-		if custom != "" {
-			prompts[key] = custom
+		if v, ok := custom[key]; ok && v != "" {
+			prompts[key] = v
 		} else {
 			prompts[key] = defaultVal
 		}
@@ -410,21 +470,28 @@ func (a *API) UpdateAIPrompts(c *gin.Context) {
 
 	defaults := defaultAIPrompts()
 
+	// Load existing custom prompts
+	custom, err := loadPromptsFromFile()
+	if err != nil {
+		transport.InternalServerError(c, "读取提示词文件失败: "+err.Error())
+		return
+	}
+
+	// Update custom prompts
 	for key, val := range req.Prompts {
 		if _, ok := defaults[key]; !ok {
 			continue // 忽略未知的 key
 		}
-		viperKey := "AI_PROMPT_" + key
 		if val == "" || val == defaults[key] {
 			// 如果为空或与默认值相同，删除自定义配置
-			viper.Set(viperKey, "")
+			delete(custom, key)
 		} else {
-			viper.Set(viperKey, val)
+			custom[key] = val
 		}
 	}
 
-	if err := viper.WriteConfig(); err != nil {
-		transport.InternalServerError(c, "保存配置失败: "+err.Error())
+	if err := savePromptsToFile(custom); err != nil {
+		transport.InternalServerError(c, "保存提示词文件失败: "+err.Error())
 		return
 	}
 
@@ -433,10 +500,11 @@ func (a *API) UpdateAIPrompts(c *gin.Context) {
 
 // GetAIPrompt 获取指定 AI 功能的提示词（优先自定义，否则默认）
 func GetAIPrompt(key string) string {
-	viperKey := "AI_PROMPT_" + key
-	custom := viper.GetString(viperKey)
-	if custom != "" {
-		return custom
+	custom, err := loadPromptsFromFile()
+	if err == nil {
+		if v, ok := custom[key]; ok && v != "" {
+			return v
+		}
 	}
 	defaults := defaultAIPrompts()
 	if val, ok := defaults[key]; ok {

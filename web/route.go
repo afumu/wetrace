@@ -52,6 +52,7 @@ func (s *Service) setupRoutes() {
 			system.GET("/sync_config", s.api.GetSyncConfig)
 			system.POST("/sync_config", s.api.UpdateSyncConfig)
 			system.POST("/sync", s.api.TriggerSync)
+			system.GET("/sync_status", s.api.GetSyncStatus)
 
 			// 自动备份路由 (需求8)
 			system.GET("/backup_config", s.api.GetBackupConfig)

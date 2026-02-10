@@ -11,8 +11,9 @@ import (
 )
 
 // BackupFunc is the function called to perform a backup operation.
-// It receives the backup path and format, returns the output file path.
-type BackupFunc func(backupPath, format string) (string, int, error)
+// It receives the backup path, format, and optional session IDs filter.
+// When sessionIDs is empty, all sessions are backed up.
+type BackupFunc func(backupPath, format string, sessionIDs []string) (string, int, error)
 
 // Record represents a single backup history entry.
 type Record struct {
@@ -131,8 +132,15 @@ func (s *Scheduler) startTicker() {
 	log.Info().Int("interval_hours", s.intervalHours).Msg("auto backup scheduler started")
 }
 
-// RunBackup executes a backup operation. Safe to call concurrently.
+// RunBackup executes a backup operation for all sessions. Safe to call concurrently.
+// Used by the automatic scheduler (timer).
 func (s *Scheduler) RunBackup() {
+	s.RunBackupWithSessions(nil)
+}
+
+// RunBackupWithSessions executes a backup operation with optional session filtering.
+// When sessionIDs is nil or empty, all sessions are backed up.
+func (s *Scheduler) RunBackupWithSessions(sessionIDs []string) {
 	s.mu.Lock()
 	if s.isRunning {
 		s.mu.Unlock()
@@ -157,7 +165,7 @@ func (s *Scheduler) RunBackup() {
 	now := time.Now()
 	backupID := "backup_" + now.Format("20060102_150405")
 
-	filePath, sessionsCount, err := s.backupFunc(backupPath, format)
+	filePath, sessionsCount, err := s.backupFunc(backupPath, format, sessionIDs)
 
 	record := Record{
 		ID:            backupID,
