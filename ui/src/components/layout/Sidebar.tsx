@@ -1,6 +1,6 @@
 import { useAppStore } from "@/stores/app"
 import { cn } from "@/lib/utils"
-import { MessageSquare, RefreshCw, Moon, Sun, Monitor, LayoutDashboard, Sparkles, Search, Key, ImageIcon } from "lucide-react"
+import { MessageSquare, RefreshCw, Moon, Sun, Monitor, LayoutDashboard, Sparkles, Search, Key, ImageIcon, CalendarDays, Heart, Cloud } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 import { systemApi, mediaApi } from "@/api"
@@ -30,6 +30,9 @@ export function Sidebar() {
     { key: 'chat', icon: MessageSquare, label: '聊天', path: '/chat' },
     { key: 'search', icon: Search, label: '搜索', path: '/search' },
     { key: 'dashboard', icon: LayoutDashboard, label: '总览', path: '/dashboard' },
+    { key: 'report', icon: CalendarDays, label: '年度报告', path: '/report' },
+    { key: 'sentiment', icon: Heart, label: '情感分析', path: '/sentiment' },
+    { key: 'wordcloud', icon: Cloud, label: '词云', path: '/wordcloud' },
   ]
 
   const handleNavClick = (key: string, path: string) => {

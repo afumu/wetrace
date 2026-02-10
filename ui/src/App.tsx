@@ -6,6 +6,9 @@ import Chat from '@/views/Chat'
 import Contact from '@/views/Contact'
 import Search from '@/views/Search'
 import Dashboard from '@/views/Dashboard'
+import AnnualReport from '@/views/AnnualReport'
+import Sentiment from '@/views/Sentiment'
+import WordCloud from '@/views/WordCloud'
 import { PaymentModal } from '@/components/PaymentModal'
 import { AgreementModal } from '@/components/AgreementModal'
 
@@ -58,6 +61,9 @@ function App() {
           <Route path="contact" element={<Contact />} />
           <Route path="search" element={<Search />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="report" element={<AnnualReport />} />
+          <Route path="sentiment" element={<Sentiment />} />
+          <Route path="wordcloud" element={<WordCloud />} />
         </Route>
       </Routes>
     </BrowserRouter>

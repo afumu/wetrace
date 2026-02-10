@@ -1,19 +1,21 @@
 import { useState } from "react"
 import { createPortal } from "react-dom"
-import { X, Calendar, FileJson, FileText, Globe } from "lucide-react"
+import { X, Calendar, FileJson, FileText, Globe, FileSpreadsheet, FileType } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "@/lib/utils"
 import { Label } from "../ui/label"
 import { Input } from "../ui/input"
 
+type ExportFormat = 'html' | 'json' | 'txt' | 'csv' | 'xlsx' | 'docx'
+
 interface ExportModalProps {
   isOpen: boolean
   onClose: () => void
-  onExport: (type: 'html' | 'json' | 'txt', range: { type: 'all' | 'custom', start?: string, end?: string }) => void
+  onExport: (type: ExportFormat, range: { type: 'all' | 'custom', start?: string, end?: string }) => void
 }
 
 export function ExportModal({ isOpen, onClose, onExport }: ExportModalProps) {
-  const [exportType, setExportType] = useState<'html' | 'json' | 'txt'>('html')
+  const [exportType, setExportType] = useState<ExportFormat>('html')
   const [rangeType, setRangeType] = useState<'all' | 'custom'>('all')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -21,24 +23,27 @@ export function ExportModal({ isOpen, onClose, onExport }: ExportModalProps) {
   if (!isOpen) return null
 
   const handleExport = () => {
-    onExport(exportType, { 
-      type: rangeType, 
-      start: startDate, 
-      end: endDate 
+    onExport(exportType, {
+      type: rangeType,
+      start: startDate,
+      end: endDate
     })
     onClose()
   }
 
   const exportOptions = [
-    { id: 'html', label: '网页导出', icon: Globe, desc: '包含图片、视频的可视化网页' },
-    { id: 'json', label: 'JSON数据', icon: FileJson, desc: '原始数据，适合开发者' },
-    { id: 'txt', label: '纯文本', icon: FileText, desc: '仅包含文字内容，易于阅读' },
-  ] as const
+    { id: 'html' as const, label: '网页导出', icon: Globe, desc: '包含图片、视频的可视化网页' },
+    { id: 'txt' as const, label: '纯文本', icon: FileText, desc: '仅包含文字内容，易于阅读' },
+    { id: 'csv' as const, label: 'CSV 表格', icon: FileSpreadsheet, desc: '逗号分隔，可用Excel打开' },
+    { id: 'xlsx' as const, label: 'Excel 表格', icon: FileSpreadsheet, desc: 'Excel格式，带表头和格式' },
+    { id: 'docx' as const, label: 'Word 文档', icon: FileType, desc: 'Word格式，按日期分段排版' },
+    { id: 'json' as const, label: 'JSON数据', icon: FileJson, desc: '原始数据，适合开发者' },
+  ]
 
   return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
-        className="bg-background border shadow-2xl rounded-xl p-6 w-[480px] animate-in zoom-in-95 duration-200 relative"
+      <div
+        className="bg-background border shadow-2xl rounded-xl p-6 w-[480px] max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 relative"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6 border-b pb-4">
@@ -55,15 +60,15 @@ export function ExportModal({ isOpen, onClose, onExport }: ExportModalProps) {
           {/* 格式选择 */}
           <div className="space-y-3">
             <Label>导出格式</Label>
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-2">
               {exportOptions.map((option) => (
-                <div 
+                <div
                   key={option.id}
                   onClick={() => setExportType(option.id)}
                   className={cn(
                     "flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-all hover:bg-muted/50",
-                    exportType === option.id 
-                      ? "border-primary bg-primary/5 ring-1 ring-primary" 
+                    exportType === option.id
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
                       : "border-border"
                   )}
                 >
@@ -74,7 +79,7 @@ export function ExportModal({ isOpen, onClose, onExport }: ExportModalProps) {
                     <option.icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="font-medium">{option.label}</div>
+                    <div className="font-medium text-sm">{option.label}</div>
                     <div className="text-xs text-muted-foreground">{option.desc}</div>
                   </div>
                 </div>
@@ -86,14 +91,14 @@ export function ExportModal({ isOpen, onClose, onExport }: ExportModalProps) {
           <div className="space-y-3">
             <Label>时间范围</Label>
             <div className="flex gap-4">
-              <Button 
+              <Button
                 variant={rangeType === 'all' ? "default" : "outline"}
                 className="flex-1"
                 onClick={() => setRangeType('all')}
               >
                 全部记录
               </Button>
-              <Button 
+              <Button
                 variant={rangeType === 'custom' ? "default" : "outline"}
                 className="flex-1 gap-2"
                 onClick={() => setRangeType('custom')}
@@ -107,16 +112,16 @@ export function ExportModal({ isOpen, onClose, onExport }: ExportModalProps) {
               <div className="grid grid-cols-2 gap-4 pt-2 animate-in slide-in-from-top-2 duration-200">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">开始日期</Label>
-                  <Input 
-                    type="date" 
+                  <Input
+                    type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">结束日期</Label>
-                  <Input 
-                    type="date" 
+                  <Input
+                    type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                   />

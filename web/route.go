@@ -53,11 +53,25 @@ func (s *Service) setupRoutes() {
 		// 导出路由
 		v1.GET("/export/chat", s.api.ExportChat)
 
+		// 搜索路由
+		searchGroup := v1.Group("/search")
+		{
+			searchGroup.GET("", s.api.Search)
+			searchGroup.GET("/context", s.api.SearchContext)
+		}
+
+		// 年度报告路由
+		reportGroup := v1.Group("/report")
+		{
+			reportGroup.GET("/annual", s.api.GetAnnualReport)
+		}
+
 		// AI 路由
 		aiGroup := v1.Group("/ai")
 		{
 			aiGroup.POST("/summarize", s.api.AISummarize)
 			aiGroup.POST("/simulate", s.api.AISimulate)
+			aiGroup.POST("/sentiment", s.api.AISentiment)
 		}
 
 		// 分析路由
@@ -71,6 +85,8 @@ func (s *Service) setupRoutes() {
 			analysisGroup.GET("/type_distribution/:id", s.api.GetMessageTypeDistribution)
 			analysisGroup.GET("/member_activity/:id", s.api.GetMemberActivity)
 			analysisGroup.GET("/repeat/:id", s.api.GetRepeatAnalysis)
+			analysisGroup.GET("/wordcloud/global", s.api.GetWordCloudGlobal)
+			analysisGroup.GET("/wordcloud/:id", s.api.GetWordCloud)
 		}
 	}
 

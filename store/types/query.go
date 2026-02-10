@@ -9,6 +9,7 @@ type MessageQuery struct {
 	Talker    string // 多个对话者可以用逗号分隔
 	Sender    string // 多个发送者可以用逗号分隔
 	Keyword   string
+	MsgType   int // 消息类型筛选，0 表示不限
 	Limit     int
 	Offset    int
 	Reverse   bool // 是否按时间倒序排列

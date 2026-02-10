@@ -6,3 +6,7 @@ export * from './media';
 export * from './system';
 export * from './analysis';
 export * from './ai';
+export * from './search';
+export * from './report';
+export * from './sentiment';
+export * from './wordcloud';

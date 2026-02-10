@@ -99,3 +99,45 @@ type DashboardTimeline struct {
 	LatestMsgTime   int64 `json:"latest_msg_time"`
 	DurationDays    int   `json:"duration_days"`
 }
+
+// AnnualReport 年度报告
+type AnnualReport struct {
+	Year         int                    `json:"year"`
+	Overview     AnnualOverview         `json:"overview"`
+	TopContacts  []*PersonalTopContact  `json:"top_contacts"`
+	MonthlyTrend []*MonthlyStat         `json:"monthly_trend"`
+	WeekdayDist  []*WeekdayStat         `json:"weekday_distribution"`
+	HourlyDist   []*HourlyStat          `json:"hourly_distribution"`
+	MessageTypes map[string]int         `json:"message_types"`
+	Highlights   AnnualHighlights       `json:"highlights"`
+}
+
+// AnnualOverview 年度概览
+type AnnualOverview struct {
+	TotalMessages    int    `json:"total_messages"`
+	SentMessages     int    `json:"sent_messages"`
+	ReceivedMessages int    `json:"received_messages"`
+	TotalContacts    int    `json:"total_contacts"`
+	ActiveContacts   int    `json:"active_contacts"`
+	TotalChatrooms   int    `json:"total_chatrooms"`
+	ActiveChatrooms  int    `json:"active_chatrooms"`
+	FirstMessageDate string `json:"first_message_date"`
+	LastMessageDate  string `json:"last_message_date"`
+	ActiveDays       int    `json:"active_days"`
+}
+
+// AnnualHighlights 年度亮点
+type AnnualHighlights struct {
+	BusiestDay          DayCount `json:"busiest_day"`
+	QuietestDay         DayCount `json:"quietest_day"`
+	LongestStreak       int      `json:"longest_streak"`
+	LateNightCount      int      `json:"late_night_count"`
+	EarliestMessageTime string   `json:"earliest_message_time"`
+	LatestMessageTime   string   `json:"latest_message_time"`
+}
+
+// DayCount 日期消息计数
+type DayCount struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}

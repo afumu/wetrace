@@ -33,33 +33,48 @@ func (a *API) ExportChat(c *gin.Context) {
 	}
 
 	format := c.Query("format")
-	if format == "txt" {
-		txtData, err := a.Export.ExportChatTxt(c.Request.Context(), talker, talkerName, start, end)
-		if err != nil {
-			transport.InternalServerError(c, fmt.Sprintf("导出失败: %v", err))
-			return
-		}
-		fileName := fmt.Sprintf("chat_export_%s_%s.txt", talkerName, talker)
-		c.Header("Content-Description", "File Transfer")
-		c.Header("Content-Transfer-Encoding", "binary")
-		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
-		c.Header("Content-Type", "text/plain; charset=utf-8")
-		c.Data(http.StatusOK, "text/plain; charset=utf-8", txtData)
-		return
+
+	var (
+		data        []byte
+		err         error
+		fileName    string
+		contentType string
+	)
+
+	ctx := c.Request.Context()
+
+	switch format {
+	case "txt":
+		data, err = a.Export.ExportChatTxt(ctx, talker, talkerName, start, end)
+		fileName = fmt.Sprintf("chat_export_%s_%s.txt", talkerName, talker)
+		contentType = "text/plain; charset=utf-8"
+	case "csv":
+		data, err = a.Export.ExportChatCSV(ctx, talker, talkerName, start, end)
+		fileName = fmt.Sprintf("chat_export_%s_%s.csv", talkerName, talker)
+		contentType = "text/csv; charset=utf-8"
+	case "xlsx":
+		data, err = a.Export.ExportChatXLSX(ctx, talker, talkerName, start, end)
+		fileName = fmt.Sprintf("chat_export_%s_%s.xlsx", talkerName, talker)
+		contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case "docx":
+		data, err = a.Export.ExportChatDOCX(ctx, talker, talkerName, start, end)
+		fileName = fmt.Sprintf("chat_export_%s_%s.docx", talkerName, talker)
+		contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	default:
+		// 默认导出 HTML ZIP
+		data, err = a.Export.ExportChat(ctx, talker, talkerName, start, end)
+		fileName = fmt.Sprintf("chat_export_%s_%s.zip", talkerName, talker)
+		contentType = "application/octet-stream"
 	}
 
-	// 执行导出
-	zipData, err := a.Export.ExportChat(c.Request.Context(), talker, talkerName, start, end)
 	if err != nil {
 		transport.InternalServerError(c, fmt.Sprintf("导出失败: %v", err))
 		return
 	}
 
-	// 设置响应头并发送 ZIP 文件
-	fileName := fmt.Sprintf("chat_export_%s_%s.zip", talkerName, talker)
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Transfer-Encoding", "binary")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
-	c.Header("Content-Type", "application/octet-stream")
-	c.Data(http.StatusOK, "application/octet-stream", zipData)
+	c.Header("Content-Type", contentType)
+	c.Data(http.StatusOK, contentType, data)
 }

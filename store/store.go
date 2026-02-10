@@ -35,6 +35,13 @@ type Store interface {
 	GetPersonalTopContacts(ctx context.Context, limit int) ([]*model.PersonalTopContact, error)
 	GetDashboardData(ctx context.Context) (*model.DashboardData, error)
 
+	// 搜索操作
+	SearchMessages(ctx context.Context, query types.MessageQuery) (*model.SearchResult, error)
+	GetMessageContext(ctx context.Context, talker string, seq int64, before, after int) ([]*model.Message, error)
+
+	// 年度报告
+	GetAnnualReport(ctx context.Context, year int) (*model.AnnualReport, error)
+
 	// Watch 注册文件系统事件的回调函数
 	Watch(group string, callback func(event fsnotify.Event) error) error
 

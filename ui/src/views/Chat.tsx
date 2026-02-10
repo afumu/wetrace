@@ -103,12 +103,11 @@ export default function Chat() {
     }
   }
 
-  const handleExportRequest = (type: 'html' | 'json' | 'txt', range: { type: 'all' | 'custom', start?: string, end?: string }) => {
+  const handleExportRequest = (type: string, range: { type: 'all' | 'custom', start?: string, end?: string }) => {
     if (!activeTalker) return
 
     let timeRangeParam = ''
     if (range.type === 'custom' && range.start && range.end) {
-      // 格式化为 YYYY-MM-DD~YYYY-MM-DD
       timeRangeParam = `&time_range=${range.start}~${range.end}`
     }
 
@@ -122,7 +121,7 @@ export default function Chat() {
       a.click()
       document.body.removeChild(a)
     } else {
-      const formatParam = type === 'txt' ? '&format=txt' : ''
+      const formatParam = type !== 'html' ? `&format=${type}` : ''
       const url = `/api/v1/export/chat?talker=${activeTalker}&name=${encodeURIComponent(displayName)}${formatParam}${timeRangeParam}`
       window.open(url, '_blank')
     }

@@ -137,6 +137,18 @@ func (s *DefaultStore) GetDashboardData(ctx context.Context) (*model.DashboardDa
 	return s.repo.GetDashboardData(ctx)
 }
 
+func (s *DefaultStore) SearchMessages(ctx context.Context, query types.MessageQuery) (*model.SearchResult, error) {
+	return s.repo.SearchMessages(ctx, query)
+}
+
+func (s *DefaultStore) GetMessageContext(ctx context.Context, talker string, seq int64, before, after int) ([]*model.Message, error) {
+	return s.repo.GetMessageContext(ctx, talker, seq, before, after)
+}
+
+func (s *DefaultStore) GetAnnualReport(ctx context.Context, year int) (*model.AnnualReport, error) {
+	return s.repo.GetAnnualReport(ctx, year)
+}
+
 func (s *DefaultStore) Watch(group string, callback func(event fsnotify.Event) error) error {
 	s.watcher.AddCallback(func(event fsnotify.Event) {
 		_ = callback(event)

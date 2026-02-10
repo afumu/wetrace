@@ -567,6 +567,18 @@ func (m *Message) PlainTextContent() string {
 	}
 }
 
+// SearchResult 搜索结果
+type SearchResult struct {
+	Total int           `json:"total"`
+	Items []*SearchItem `json:"items"`
+}
+
+// SearchItem 搜索结果项
+type SearchItem struct {
+	*Message
+	Highlight string `json:"highlight"`
+}
+
 func (m *Message) CSV(host string) []string {
 	m.SetContent("host", host)
 	return []string{
