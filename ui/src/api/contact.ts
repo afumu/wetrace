@@ -1,4 +1,4 @@
-import { request } from "@/lib/request"
+import { request, getApiBaseUrl } from "@/lib/request"
 import { ContactType } from "@/types"
 import type { Contact, ContactParams } from "@/types"
 
@@ -83,7 +83,14 @@ export const contactApi = {
 
   getDisplayName: (contact: Contact): string => {
     return contact.remark || contact.nickname || contact.alias || contact.wxid
-  }
+  },
+
+  exportContacts: (format: 'csv' | 'xlsx' = 'csv', keyword?: string): string => {
+    const baseURL = getApiBaseUrl()
+    const params = new URLSearchParams({ format })
+    if (keyword) params.set('keyword', keyword)
+    return `${baseURL}/api/v1/contacts/export?${params.toString()}`
+  },
 }
 
 export { getAvatarUrl }

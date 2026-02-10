@@ -54,8 +54,8 @@ export default function AnnualReportView() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground animate-pulse font-medium">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-muted-foreground animate-pulse text-sm">
             正在生成 {year} 年度报告...
           </p>
         </div>
@@ -67,7 +67,7 @@ export default function AnnualReportView() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-4">
-          <p className="text-destructive font-medium">加载年度报告失败</p>
+          <p className="text-destructive font-medium text-sm">加载年度报告失败</p>
           <div className="flex items-center gap-2 justify-center">
             <Input
               type="number"
@@ -88,14 +88,14 @@ export default function AnnualReportView() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="max-w-5xl mx-auto p-6 space-y-8 pb-20">
+      <div className="max-w-5xl mx-auto p-6 space-y-6 pb-20">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">
+            <h2 className="text-2xl font-bold tracking-tight">
               {data.year} 年度社交报告
             </h2>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               你的微信年度数据回顾
             </p>
           </div>
@@ -153,7 +153,7 @@ function AnnualOverviewCards({ overview }: { overview: AnnualReport["overview"] 
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       {stats.map((s) => (
         <Card key={s.label}>
-          <CardContent className="pt-4 pb-4">
+          <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <s.icon className={`w-4 h-4 ${s.color}`} />
               <span className="text-xs text-muted-foreground">{s.label}</span>
@@ -185,7 +185,7 @@ function AnnualHighlightsSection({ highlights }: { highlights: AnnualReport["hig
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {items.map((item) => (
           <Card key={item.label} className={`border-none shadow-sm bg-gradient-to-br ${item.color} to-white dark:to-background`}>
-            <CardContent className="pt-4 pb-4">
+            <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <item.icon className="w-4 h-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground font-medium">{item.label}</span>

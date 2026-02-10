@@ -7,6 +7,7 @@ import { Virtuoso } from "react-virtuoso"
 import { useChat } from "@/hooks/useChat"
 import { useQueryClient } from "@tanstack/react-query"
 import { sessionApi } from "@/api/session"
+import { toast } from "sonner"
 
 export function SessionList() {
   const [search, setSearch] = useState("")
@@ -17,17 +18,16 @@ export function SessionList() {
   const { data: sessions = [], isLoading } = useSessions()
 
   const handleDelete = async (talker: string) => {
-    if (confirm("确定要删除该会话吗？这可能会从本地数据库中移除该会话。")) {
-      try {
-        await sessionApi.deleteSession(talker)
-        if (activeTalker === talker) {
-          setActiveTalker(null)
-        }
-        queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      } catch (error) {
-        console.error("Failed to delete session:", error)
-        alert("删除会话失败")
+    try {
+      await sessionApi.deleteSession(talker)
+      if (activeTalker === talker) {
+        setActiveTalker(null)
       }
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      toast.success("会话已删除")
+    } catch (error) {
+      console.error("Failed to delete session:", error)
+      toast.error("删除会话失败")
     }
   }
 

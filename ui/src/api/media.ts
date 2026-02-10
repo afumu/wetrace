@@ -53,5 +53,26 @@ export const mediaApi = {
 
   getCacheStatus: () => {
     return request.get('/api/v1/media/cache/status')
-  }
+  },
+
+  getImageList: (params?: {
+    talker?: string;
+    time_range?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    return request.get<{
+      total: number;
+      items: ImageListItem[];
+    }>('/api/v1/media/images', params)
+  },
+}
+
+export interface ImageListItem {
+  key: string;
+  talker: string;
+  talkerName: string;
+  time: string;
+  thumbnailUrl: string;
+  seq: number;
 }

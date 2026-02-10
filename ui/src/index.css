@@ -29,6 +29,13 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
  
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -58,6 +65,12 @@
     --radius: 0.5rem;
     --chat-self-bg: 101 78% 67%;
     --chat-self-text: 0 0% 0%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 0%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
   }
  
   .dark {
@@ -83,6 +96,12 @@
     --chat-self-bg: 153 40% 29%;
     --chat-self-text: 0 0% 100%;
     --chat-self-foreground: 0 0% 100%;
+    --success: 142 69% 58%;
+    --success-foreground: 0 0% 0%;
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 0%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
   }
 }
 

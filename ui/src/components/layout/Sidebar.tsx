@@ -1,10 +1,10 @@
 import { useAppStore } from "@/stores/app"
 import { cn } from "@/lib/utils"
-import { MessageSquare, RefreshCw, Moon, Sun, Monitor, LayoutDashboard, Sparkles, Search, Key, ImageIcon, CalendarDays, Heart, Cloud } from "lucide-react"
+import { MessageSquare, RefreshCw, Moon, Sun, Monitor, Search, Key, ImageIcon, CalendarDays, Heart, Cloud, BrainCircuit, Users, Settings, Shield, PlayCircle } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 import { systemApi, mediaApi } from "@/api"
-import { PersonalInsight } from "../analysis/PersonalInsight"
+import { toast } from "sonner"
 import { KeyManagerModal } from "./KeyManagerModal"
 import { ImageCacheManager } from "../chat/ImageCacheManager"
 
@@ -12,27 +12,31 @@ export function Sidebar() {
   const { activeNav, setActiveNav, toggleTheme, settings } = useAppStore()
   const navigate = useNavigate()
   const [isSyncing, setIsSyncing] = useState(false)
-  const [showPersonalInsight, setShowPersonalInsight] = useState(false)
   const [showKeyManager, setShowKeyManager] = useState(false)
 
   const handleFullCache = async () => {
     try {
       await mediaApi.startCache('all')
       window.dispatchEvent(new CustomEvent('image-cache-start'))
-      alert("全量图片预加载任务已启动，你可以在右下角查看进度。")
+      toast.success("全量图片预加载任务已启动，你可以在右下角查看进度。")
     } catch (err) {
       console.error("Failed to start full cache:", err)
-      alert("启动缓存任务失败")
+      toast.error("启动缓存任务失败")
     }
   }
 
   const navItems = [
     { key: 'chat', icon: MessageSquare, label: '聊天', path: '/chat' },
+    { key: 'contacts', icon: Users, label: '联系人', path: '/contacts' },
     { key: 'search', icon: Search, label: '搜索', path: '/search' },
-    { key: 'dashboard', icon: LayoutDashboard, label: '总览', path: '/dashboard' },
+    { key: 'gallery', icon: ImageIcon, label: '图片', path: '/gallery' },
     { key: 'report', icon: CalendarDays, label: '年度报告', path: '/report' },
     { key: 'sentiment', icon: Heart, label: '情感分析', path: '/sentiment' },
     { key: 'wordcloud', icon: Cloud, label: '词云', path: '/wordcloud' },
+    { key: 'ai-tools', icon: BrainCircuit, label: 'AI工具箱', path: '/ai-tools' },
+    { key: 'monitor', icon: Shield, label: '监控配置', path: '/monitor' },
+    { key: 'replay', icon: PlayCircle, label: '对话回放', path: '/replay' },
+    { key: 'settings', icon: Settings, label: '设置', path: '/settings' },
   ]
 
   const handleNavClick = (key: string, path: string) => {
@@ -41,17 +45,15 @@ export function Sidebar() {
   }
 
   const handleSync = async () => {
-    if (!confirm("确定要重新解密并同步数据吗？")) return
-    
     try {
       setIsSyncing(true)
       await systemApi.decrypt()
-      alert("数据同步成功！")
+      toast.success("数据同步成功！")
       window.location.reload()
     } catch (error: any) {
       console.error("Sync failed:", error)
       const message = error.message || "同步失败，请检查日志。"
-      alert(message)
+      toast.error(message)
     } finally {
       setIsSyncing(false)
     }
@@ -65,8 +67,8 @@ export function Sidebar() {
         <div 
           className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary cursor-pointer hover:bg-primary/20 transition-colors"
           onClick={() => {
-            setActiveNav('dashboard')
-            navigate('/')
+            setActiveNav('chat')
+            navigate('/chat')
           }}
         >
           <MessageSquare className="w-6 h-6" />
@@ -86,17 +88,9 @@ export function Sidebar() {
             )}
             title={item.label}
           >
-            <item.icon className="w-6 h-6" />
+            <item.icon className="w-5 h-5" />
           </button>
         ))}
-
-        <button
-          onClick={() => setShowPersonalInsight(true)}
-          className="w-full aspect-square flex items-center justify-center rounded-lg transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="生成社交报告"
-        >
-          <Sparkles className="w-6 h-6" />
-        </button>
       </div>
 
       <div className="mt-auto w-full flex flex-col gap-2 px-2">
@@ -108,7 +102,7 @@ export function Sidebar() {
           )}
           title="获取微信密钥"
         >
-          <Key className="w-6 h-6" />
+          <Key className="w-5 h-5" />
         </button>
 
         <button
@@ -119,7 +113,7 @@ export function Sidebar() {
           )}
           title="预加载全量图片"
         >
-          <ImageIcon className="w-6 h-6" />
+          <ImageIcon className="w-5 h-5" />
         </button>
 
         <button
@@ -131,7 +125,7 @@ export function Sidebar() {
           )}
           title="重新同步数据"
         >
-          <RefreshCw className={cn("w-6 h-6", isSyncing && "animate-spin")} />
+          <RefreshCw className={cn("w-5 h-5", isSyncing && "animate-spin")} />
         </button>
         
         <button
@@ -139,13 +133,9 @@ export function Sidebar() {
           className="w-full aspect-square flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           title="切换主题"
         >
-          <ThemeIcon className="w-6 h-6" />
+          <ThemeIcon className="w-5 h-5" />
         </button>
       </div>
-
-      {showPersonalInsight && (
-        <PersonalInsight onClose={() => setShowPersonalInsight(false)} />
-      )}
 
       {showKeyManager && (
         <KeyManagerModal onClose={() => setShowKeyManager(false)} />

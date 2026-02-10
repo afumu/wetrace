@@ -1,6 +1,9 @@
 package api
 
 import (
+	"time"
+
+	"github.com/afumu/wetrace/internal/ai"
 	"github.com/afumu/wetrace/pkg/util"
 	"github.com/afumu/wetrace/web/transport"
 	"github.com/gin-gonic/gin"
@@ -115,4 +118,161 @@ func (a *API) UpdateConfig(c *gin.Context) {
 	}
 
 	transport.SendSuccess(c, gin.H{"status": "ok"})
+}
+
+// maskAPIKey 对 API Key 做脱敏处理，仅显示前4位和后4位
+func maskAPIKey(key string) string {
+	if len(key) <= 8 {
+		return "****"
+	}
+	return key[:4] + "****" + key[len(key)-4:]
+}
+
+// GetAIConfig 获取 AI 配置
+func (a *API) GetAIConfig(c *gin.Context) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	masked := ""
+	if a.Conf.AIAPIKey != "" {
+		masked = maskAPIKey(a.Conf.AIAPIKey)
+	}
+
+	transport.SendSuccess(c, gin.H{
+		"enabled":        a.Conf.AIEnabled,
+		"provider":       a.Conf.AIProvider,
+		"model":          a.Conf.AIModel,
+		"base_url":       a.Conf.AIBaseURL,
+		"api_key_masked": masked,
+	})
+}
+
+// UpdateAIConfig 更新 AI 配置
+func (a *API) UpdateAIConfig(c *gin.Context) {
+	var req struct {
+		Enabled  bool   `json:"enabled"`
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
+		BaseURL  string `json:"base_url"`
+		APIKey   string `json:"api_key"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, "参数错误")
+		return
+	}
+
+	if req.Enabled {
+		if req.Model == "" || req.BaseURL == "" || req.APIKey == "" {
+			transport.BadRequest(c, "启用 AI 时必须提供 model、base_url 和 api_key")
+			return
+		}
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// 持久化到 viper
+	viper.Set("AI_ENABLED", req.Enabled)
+	viper.Set("AI_PROVIDER", req.Provider)
+	viper.Set("AI_MODEL", req.Model)
+	viper.Set("AI_BASE_URL", req.BaseURL)
+	viper.Set("AI_API_KEY", req.APIKey)
+
+	if err := viper.WriteConfig(); err != nil {
+		transport.InternalServerError(c, "保存配置失败: "+err.Error())
+		return
+	}
+
+	// 同步更新内存配置
+	a.Conf.AIEnabled = req.Enabled
+	a.Conf.AIProvider = req.Provider
+	a.Conf.AIModel = req.Model
+	a.Conf.AIBaseURL = req.BaseURL
+	a.Conf.AIAPIKey = req.APIKey
+
+	// 重建 AI 客户端
+	if req.Enabled {
+		a.AI = ai.NewClient(req.APIKey, req.BaseURL, req.Model)
+	} else {
+		a.AI = nil
+	}
+
+	transport.SendSuccess(c, gin.H{"status": "ok"})
+}
+
+// TestAIConfig 测试 AI 连接
+func (a *API) TestAIConfig(c *gin.Context) {
+	a.mu.Lock()
+	client := a.AI
+	a.mu.Unlock()
+
+	if client == nil {
+		transport.BadRequest(c, "AI 未启用或未配置")
+		return
+	}
+
+	start := time.Now()
+	_, err := client.Chat([]ai.Message{
+		{Role: "user", Content: "ping"},
+	})
+	latency := time.Since(start).Milliseconds()
+
+	if err != nil {
+		transport.InternalServerError(c, "AI 连接测试失败: "+err.Error())
+		return
+	}
+
+	a.mu.Lock()
+	model := a.Conf.AIModel
+	a.mu.Unlock()
+
+	transport.SendSuccess(c, gin.H{
+		"status":     "connected",
+		"model":      model,
+		"latency_ms": latency,
+	})
+}
+
+// GetCompliance 获取合规同意状态
+func (a *API) GetCompliance(c *gin.Context) {
+	agreed := viper.GetBool("COMPLIANCE_AGREED")
+	agreedAt := viper.GetString("COMPLIANCE_AGREED_AT")
+	version := viper.GetString("COMPLIANCE_VERSION")
+	if version == "" {
+		version = "1.0"
+	}
+
+	transport.SendSuccess(c, gin.H{
+		"agreed":    agreed,
+		"agreed_at": agreedAt,
+		"version":   version,
+	})
+}
+
+// AgreeCompliance 提交合规同意
+func (a *API) AgreeCompliance(c *gin.Context) {
+	var req struct {
+		Version string `json:"version"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, "参数错误")
+		return
+	}
+
+	if req.Version == "" {
+		req.Version = "1.0"
+	}
+
+	now := time.Now().Format(time.RFC3339)
+
+	viper.Set("COMPLIANCE_AGREED", true)
+	viper.Set("COMPLIANCE_AGREED_AT", now)
+	viper.Set("COMPLIANCE_VERSION", req.Version)
+
+	if err := viper.WriteConfig(); err != nil {
+		transport.InternalServerError(c, "保存配置失败: "+err.Error())
+		return
+	}
+
+	transport.SendSuccess(c, gin.H{"status": "agreed"})
 }

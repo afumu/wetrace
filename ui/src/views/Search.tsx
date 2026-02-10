@@ -68,8 +68,8 @@ export default function SearchView() {
     <div className="flex flex-col h-full bg-background">
       <div className="p-6 pb-0 max-w-5xl mx-auto w-full">
         <div className="mb-6">
-          <h2 className="text-3xl font-bold tracking-tight mb-2">全文搜索</h2>
-          <p className="text-muted-foreground">跨会话关键词搜索，支持高级筛选</p>
+          <h2 className="text-2xl font-bold tracking-tight mb-1">全文搜索</h2>
+          <p className="text-sm text-muted-foreground">跨会话关键词搜索，支持高级筛选</p>
         </div>
 
         {/* Search bar */}

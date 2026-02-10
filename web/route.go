@@ -5,11 +5,15 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/afumu/wetrace/web/middleware"
 	"github.com/gin-gonic/gin"
 )
 
 // setupRoutes 初始化所有应用程序路由。
 func (s *Service) setupRoutes() {
+	// 密码保护中间件
+	s.router.Use(middleware.AuthMiddleware(s.api))
+
 	// API v1 路由组, 使用在 service 中初始化的处理器
 	v1 := s.router.Group("/api/v1")
 	{
@@ -24,6 +28,32 @@ func (s *Service) setupRoutes() {
 			system.GET("/detect/db_path", s.api.DetectWeChatDataPath)
 			system.POST("/select_path", s.api.SelectPath)
 			system.POST("/config", s.api.UpdateConfig)
+
+			// AI 配置路由 (需求3)
+			system.GET("/ai_config", s.api.GetAIConfig)
+			system.POST("/ai_config", s.api.UpdateAIConfig)
+			system.POST("/ai_config/test", s.api.TestAIConfig)
+
+			// 密码保护路由 (需求6)
+			system.GET("/password/status", s.api.GetPasswordStatus)
+			system.POST("/password/set", s.api.SetPassword)
+			system.POST("/password/verify", s.api.VerifyPassword)
+			system.POST("/password/disable", s.api.DisablePassword)
+
+			// 合规提示路由 (需求9)
+			system.GET("/compliance", s.api.GetCompliance)
+			system.POST("/compliance/agree", s.api.AgreeCompliance)
+
+			// 自动同步路由 (需求5)
+			system.GET("/sync_config", s.api.GetSyncConfig)
+			system.POST("/sync_config", s.api.UpdateSyncConfig)
+			system.POST("/sync", s.api.TriggerSync)
+
+			// 自动备份路由 (需求8)
+			system.GET("/backup_config", s.api.GetBackupConfig)
+			system.POST("/backup_config", s.api.UpdateBackupConfig)
+			system.POST("/backup/run", s.api.RunBackup)
+			system.GET("/backup/history", s.api.GetBackupHistory)
 		}
 
 		// 会话路由
@@ -39,12 +69,14 @@ func (s *Service) setupRoutes() {
 		// 联系人路由
 		v1.GET("/contacts", s.api.GetContacts)
 		v1.GET("/contacts/:id", s.api.GetContactByID)
+		v1.GET("/contacts/export", s.api.ExportContacts)
 
 		// 群聊路由
 		v1.GET("/chatrooms", s.api.GetChatRooms)
 		v1.GET("/chatrooms/:id", s.api.GetChatRoomByID)
 
 		// 媒体路由
+		v1.GET("/media/images", s.api.GetImageList)
 		v1.GET("/media/:type/:key", s.api.GetMedia)
 		v1.GET("/media/emoji", s.api.GetEmoji)
 		v1.POST("/media/cache/start", s.api.HandleStartCache)
@@ -52,6 +84,7 @@ func (s *Service) setupRoutes() {
 
 		// 导出路由
 		v1.GET("/export/chat", s.api.ExportChat)
+		v1.GET("/export/forensic", s.api.ExportForensic)
 
 		// 搜索路由
 		searchGroup := v1.Group("/search")
@@ -72,6 +105,10 @@ func (s *Service) setupRoutes() {
 			aiGroup.POST("/summarize", s.api.AISummarize)
 			aiGroup.POST("/simulate", s.api.AISimulate)
 			aiGroup.POST("/sentiment", s.api.AISentiment)
+			aiGroup.POST("/summary", s.api.AISummary)
+			aiGroup.POST("/todos", s.api.AIExtractTodos)
+			aiGroup.POST("/extract", s.api.AIExtractInfo)
+			aiGroup.POST("/voice2text", s.api.AIVoice2Text)
 		}
 
 		// 分析路由
@@ -87,6 +124,35 @@ func (s *Service) setupRoutes() {
 			analysisGroup.GET("/repeat/:id", s.api.GetRepeatAnalysis)
 			analysisGroup.GET("/wordcloud/global", s.api.GetWordCloudGlobal)
 			analysisGroup.GET("/wordcloud/:id", s.api.GetWordCloud)
+		}
+
+		// 回放路由 (需求16)
+		v1.GET("/messages/replay", s.api.GetReplayMessages)
+
+		// 回放导出路由 (需求17)
+		replayExport := v1.Group("/export/replay")
+		{
+			replayExport.POST("", s.api.CreateReplayExport)
+			replayExport.GET("/status/:task_id", s.api.GetReplayExportStatus)
+			replayExport.GET("/download/:task_id", s.api.DownloadReplayExport)
+		}
+
+		// 监控配置路由 (需求14+15)
+		monitorGroup := v1.Group("/monitor")
+		{
+			monitorGroup.GET("/configs", s.api.GetMonitorConfigs)
+			monitorGroup.POST("/configs", s.api.CreateMonitorConfig)
+			monitorGroup.PUT("/configs/:id", s.api.UpdateMonitorConfig)
+			monitorGroup.DELETE("/configs/:id", s.api.DeleteMonitorConfig)
+			monitorGroup.POST("/test", s.api.TestMonitorPush)
+		}
+
+		// 飞书配置路由 (需求15)
+		feishuGroup := v1.Group("/feishu")
+		{
+			feishuGroup.GET("/config", s.api.GetFeishuConfig)
+			feishuGroup.PUT("/config", s.api.UpdateFeishuConfig)
+			feishuGroup.POST("/test", s.api.TestFeishuBot)
 		}
 	}
 

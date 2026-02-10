@@ -1,6 +1,6 @@
 import { useAppStore } from "@/stores/app"
 import { cn } from "@/lib/utils"
-import { MessageSquare, Settings } from "lucide-react"
+import { MessageSquare, Search, CalendarDays, Heart, MoreHorizontal } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 export function MobileNav() {
@@ -9,7 +9,10 @@ export function MobileNav() {
 
   const navItems = [
     { key: 'chat', icon: MessageSquare, label: '聊天', path: '/chat' },
-    { key: 'settings', icon: Settings, label: '设置', path: '/settings' },
+    { key: 'search', icon: Search, label: '搜索', path: '/search' },
+    { key: 'report', icon: CalendarDays, label: '报告', path: '/report' },
+    { key: 'sentiment', icon: Heart, label: '情感', path: '/sentiment' },
+    { key: 'more', icon: MoreHorizontal, label: '更多', path: '/wordcloud' },
   ]
 
   const handleNavClick = (key: string, path: string) => {
@@ -30,7 +33,7 @@ export function MobileNav() {
               : "text-muted-foreground"
           )}
         >
-          <item.icon className="w-6 h-6" />
+          <item.icon className="w-5 h-5" />
           <span className="text-[10px] font-medium">{item.label}</span>
         </button>
       ))}

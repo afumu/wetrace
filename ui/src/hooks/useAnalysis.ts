@@ -58,31 +58,3 @@ export function useAnalysis(talker: string) {
     };
 
   }
-
-  
-
-  export function usePersonalAnalysis() {
-
-    const topContactsQuery = useQuery({
-
-      queryKey: ["analysis", "personal", "top-contacts"],
-
-      queryFn: () => analysisApi.getPersonalTopContacts(),
-
-      retry: 1,
-
-    });
-
-  
-
-    return {
-
-      topContacts: topContactsQuery,
-
-      isLoading: topContactsQuery.isLoading,
-
-    };
-
-  }
-
-  

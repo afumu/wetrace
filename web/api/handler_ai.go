@@ -383,3 +383,380 @@ func parseSentimentResponse(raw string) (*AISentimentResponse, error) {
 	}
 	return &resp, nil
 }
+
+// --- AI 高级功能：待办提取、关键信息抽取、长对话摘要、语音转文字 ---
+
+// AITodosRequest 待办事项提取请求
+type AITodosRequest struct {
+	Talker    string `json:"talker" binding:"required"`
+	TimeRange string `json:"time_range"`
+}
+
+// AITodoItem 单条待办事项
+type AITodoItem struct {
+	Content    string `json:"content"`
+	Deadline   string `json:"deadline"`
+	Priority   string `json:"priority"`
+	SourceMsg  string `json:"source_msg"`
+	SourceTime string `json:"source_time"`
+}
+
+// AITodosResponse 待办事项提取响应
+type AITodosResponse struct {
+	Todos []AITodoItem `json:"todos"`
+}
+
+// AIExtractRequest 关键信息抽取请求
+type AIExtractRequest struct {
+	Talker    string   `json:"talker" binding:"required"`
+	TimeRange string   `json:"time_range"`
+	Types     []string `json:"types"`
+}
+
+// AIExtractItem 单条抽取信息
+type AIExtractItem struct {
+	Type    string `json:"type"`
+	Value   string `json:"value"`
+	Context string `json:"context"`
+	Time    string `json:"time"`
+}
+
+// AIExtractResponse 关键信息抽取响应
+type AIExtractResponse struct {
+	Extractions []AIExtractItem `json:"extractions"`
+}
+
+// AISummaryRequest 长对话/群聊摘要请求
+type AISummaryRequest struct {
+	Talker    string `json:"talker" binding:"required"`
+	TimeRange string `json:"time_range"`
+}
+
+// AIVoice2TextRequest 语音转文字请求
+type AIVoice2TextRequest struct {
+	Talker string `json:"talker" binding:"required"`
+	Seq    int64  `json:"seq" binding:"required"`
+}
+
+// AISummary 长对话/群聊自动摘要（增强版）
+func (a *API) AISummary(c *gin.Context) {
+	if a.AI == nil {
+		transport.BadRequest(c, "AI 功能未启用")
+		return
+	}
+
+	var req AISummaryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, err.Error())
+		return
+	}
+
+	var start, end time.Time
+	var ok bool
+	if req.TimeRange != "" {
+		start, end, ok = util.TimeRangeOf(req.TimeRange)
+	}
+	if !ok {
+		end = time.Now()
+		start = end.AddDate(-20, 0, 0)
+	}
+
+	msgs, err := a.Store.GetMessages(context.Background(), types.MessageQuery{
+		Talker:    req.Talker,
+		StartTime: start,
+		EndTime:   end,
+		Limit:     500,
+	})
+	if err != nil {
+		transport.InternalServerError(c, err.Error())
+		return
+	}
+
+	if len(msgs) == 0 {
+		transport.SendSuccess(c, gin.H{"summary": "暂无聊天记录可摘要"})
+		return
+	}
+
+	if len(msgs) > 500 {
+		msgs = msgs[:500]
+	}
+
+	var sb strings.Builder
+	for _, m := range msgs {
+		if m.Type == 1 {
+			sb.WriteString(fmt.Sprintf("[%s] %s: %s\n",
+				m.CreateTime.Format("01-02 15:04"), m.SenderName, m.Content))
+		}
+	}
+
+	prompt := `以下是一段微信聊天记录，请生成结构化摘要。要求：
+1. 核心话题：列出讨论的主要话题（不超过5个）
+2. 关键结论：列出达成的共识或结论
+3. 待跟进事项：列出需要后续跟进的事项
+4. 一句话总结：用一句话概括整段对话
+
+请严格按照以下 JSON 格式返回，不要包含其他文字：
+{
+  "topics": ["话题1", "话题2"],
+  "conclusions": ["结论1", "结论2"],
+  "follow_ups": ["跟进事项1", "跟进事项2"],
+  "one_line_summary": "一句话总结"
+}
+
+聊天记录：
+` + sb.String()
+
+	result, err := a.AI.Chat([]ai.Message{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		transport.InternalServerError(c, err.Error())
+		return
+	}
+
+	parsed := parseJSONFromAI(result)
+	if parsed != nil {
+		transport.SendSuccess(c, parsed)
+		return
+	}
+	transport.SendSuccess(c, gin.H{"summary": result})
+}
+
+// AIExtractTodos 从聊天记录中提取待办事项
+func (a *API) AIExtractTodos(c *gin.Context) {
+	if a.AI == nil {
+		transport.BadRequest(c, "AI 功能未启用")
+		return
+	}
+
+	var req AITodosRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, err.Error())
+		return
+	}
+
+	var start, end time.Time
+	var ok bool
+	if req.TimeRange != "" {
+		start, end, ok = util.TimeRangeOf(req.TimeRange)
+	}
+	if !ok {
+		// 默认最近一周
+		end = time.Now()
+		start = end.AddDate(0, 0, -7)
+	}
+
+	msgs, err := a.Store.GetMessages(context.Background(), types.MessageQuery{
+		Talker:    req.Talker,
+		StartTime: start,
+		EndTime:   end,
+		Limit:     300,
+	})
+	if err != nil {
+		transport.InternalServerError(c, err.Error())
+		return
+	}
+
+	if len(msgs) == 0 {
+		transport.SendSuccess(c, AITodosResponse{Todos: []AITodoItem{}})
+		return
+	}
+
+	var sb strings.Builder
+	for _, m := range msgs {
+		if m.Type == 1 {
+			sb.WriteString(fmt.Sprintf("[%s] %s: %s\n",
+				m.CreateTime.Format("2006-01-02 15:04"), m.SenderName, m.Content))
+		}
+	}
+
+	prompt := `以下是一段微信聊天记录，请从中提取所有待办事项、任务、提醒和承诺。
+包括但不限于：
+- 明确的任务分配（"帮我..."、"你去..."）
+- 时间约定（"明天..."、"下周..."）
+- 承诺和提醒（"记得..."、"别忘了..."）
+- 需要回复或跟进的事项
+
+请严格按照以下 JSON 格式返回，不要包含其他文字：
+{
+  "todos": [
+    {
+      "content": "待办事项描述",
+      "deadline": "截止时间（如有，ISO 8601格式，无则为空字符串）",
+      "priority": "high/medium/low",
+      "source_msg": "原始消息内容",
+      "source_time": "消息时间"
+    }
+  ]
+}
+
+如果没有找到任何待办事项，返回 {"todos": []}
+
+聊天记录：
+` + sb.String()
+
+	result, err := a.AI.Chat([]ai.Message{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		transport.InternalServerError(c, err.Error())
+		return
+	}
+
+	var resp AITodosResponse
+	if err := parseAIJSON(result, &resp); err != nil {
+		transport.SendSuccess(c, gin.H{"todos": []interface{}{}, "raw": result})
+		return
+	}
+	transport.SendSuccess(c, resp)
+}
+
+// AIExtractInfo 从聊天记录中抽取关键信息（地址、时间、金额、电话等）
+func (a *API) AIExtractInfo(c *gin.Context) {
+	if a.AI == nil {
+		transport.BadRequest(c, "AI 功能未启用")
+		return
+	}
+
+	var req AIExtractRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, err.Error())
+		return
+	}
+
+	var start, end time.Time
+	var ok bool
+	if req.TimeRange != "" {
+		start, end, ok = util.TimeRangeOf(req.TimeRange)
+	}
+	if !ok {
+		end = time.Now()
+		start = end.AddDate(0, -1, 0)
+	}
+
+	msgs, err := a.Store.GetMessages(context.Background(), types.MessageQuery{
+		Talker:    req.Talker,
+		StartTime: start,
+		EndTime:   end,
+		Limit:     300,
+	})
+	if err != nil {
+		transport.InternalServerError(c, err.Error())
+		return
+	}
+
+	if len(msgs) == 0 {
+		transport.SendSuccess(c, AIExtractResponse{Extractions: []AIExtractItem{}})
+		return
+	}
+
+	var sb strings.Builder
+	for _, m := range msgs {
+		if m.Type == 1 {
+			sb.WriteString(fmt.Sprintf("[%s] %s: %s\n",
+				m.CreateTime.Format("2006-01-02 15:04"), m.SenderName, m.Content))
+		}
+	}
+
+	typesHint := "address（地址）、time（时间约定）、amount（金额）、phone（电话号码）"
+	if len(req.Types) > 0 {
+		typesHint = strings.Join(req.Types, "、")
+	}
+
+	prompt := fmt.Sprintf(`以下是一段微信聊天记录，请从中提取以下类型的关键信息：%s
+
+提取规则：
+- address: 具体地址、地点、位置信息
+- time: 时间约定、日期安排（非消息本身的时间戳）
+- amount: 金额、价格、费用
+- phone: 电话号码、手机号
+
+请严格按照以下 JSON 格式返回，不要包含其他文字：
+{
+  "extractions": [
+    {
+      "type": "address/time/amount/phone",
+      "value": "提取的具体值",
+      "context": "包含该信息的原始消息",
+      "time": "消息时间"
+    }
+  ]
+}
+
+如果没有找到任何信息，返回 {"extractions": []}
+
+聊天记录：
+%s`, typesHint, sb.String())
+
+	result, err := a.AI.Chat([]ai.Message{
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		transport.InternalServerError(c, err.Error())
+		return
+	}
+
+	var extractResp AIExtractResponse
+	if err := parseAIJSON(result, &extractResp); err != nil {
+		transport.SendSuccess(c, gin.H{"extractions": []interface{}{}, "raw": result})
+		return
+	}
+	transport.SendSuccess(c, extractResp)
+}
+
+// AIVoice2Text 语音消息转文字
+func (a *API) AIVoice2Text(c *gin.Context) {
+	if a.AI == nil {
+		transport.BadRequest(c, "AI 功能未启用")
+		return
+	}
+
+	var req AIVoice2TextRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, err.Error())
+		return
+	}
+
+	// 语音转文字需要 STT 服务支持，当前通过 AI 模拟实现
+	// 实际生产环境应集成 Whisper API 或其他 STT 服务
+	// 这里先获取语音消息的元信息，返回提示
+	transport.SendSuccess(c, gin.H{
+		"text":     "",
+		"duration": 0,
+		"language": "",
+		"error":    "语音转文字功能需要配置 STT（语音识别）服务，当前暂未集成",
+	})
+}
+
+// parseJSONFromAI 从 AI 返回的文本中提取 JSON 并解析为 map
+func parseJSONFromAI(raw string) map[string]interface{} {
+	jsonStr := extractJSON(raw)
+	if jsonStr == "" {
+		return nil
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		return nil
+	}
+	return result
+}
+
+// parseAIJSON 从 AI 返回的文本中提取 JSON 并解析到指定结构体
+func parseAIJSON(raw string, v interface{}) error {
+	jsonStr := extractJSON(raw)
+	if jsonStr == "" {
+		return fmt.Errorf("no JSON found in AI response")
+	}
+	return json.Unmarshal([]byte(jsonStr), v)
+}
+
+// extractJSON 从可能包含 markdown 代码块的文本中提取 JSON 字符串
+func extractJSON(raw string) string {
+	// 尝试提取 JSON 内容（AI 可能返回 markdown 代码块包裹的 JSON）
+	if idx := strings.Index(raw, "{"); idx >= 0 {
+		if endIdx := strings.LastIndex(raw, "}"); endIdx >= 0 {
+			return raw[idx : endIdx+1]
+		}
+	}
+	return ""
+}

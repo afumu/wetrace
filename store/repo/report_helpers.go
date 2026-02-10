@@ -79,8 +79,8 @@ func (r *Repository) overviewV3(ctx context.Context, db *sql.DB, start, end time
 	firstDate, lastDate *string) {
 
 	query := `SELECT COUNT(*),
-		SUM(CASE WHEN IsSender = 1 THEN 1 ELSE 0 END),
-		SUM(CASE WHEN IsSender = 0 THEN 1 ELSE 0 END)
+		SUM(CASE WHEN COALESCE(IsSender, 0) = 1 THEN 1 ELSE 0 END),
+		SUM(CASE WHEN COALESCE(IsSender, 0) != 1 THEN 1 ELSE 0 END)
 		FROM MSG WHERE CreateTime >= ? AND CreateTime <= ?`
 	var total, sent, recv sql.NullInt64
 	if err := db.QueryRowContext(ctx, query, start.Unix()*1000, end.Unix()*1000).Scan(&total, &sent, &recv); err == nil {
@@ -148,14 +148,22 @@ func (r *Repository) overviewV4(ctx context.Context, db *sql.DB, start, end time
 			md5Hash := strings.TrimPrefix(tableName, "Msg_")
 			if t, ok := talkerMD5Map[md5Hash]; ok {
 				talker = t
+			} else {
+				// talkerMD5Map 查不到时，通过 distinct real_sender_id 数量判断是否为群聊
+				// 群聊有多个不同发送者（real_sender_id > 0 的去重数 >= 2）
+				var distinctSenders int
+				cntQuery := fmt.Sprintf("SELECT COUNT(DISTINCT real_sender_id) FROM %s WHERE real_sender_id > 0", tableName)
+				if db.QueryRowContext(ctx, cntQuery).Scan(&distinctSenders) == nil && distinctSenders >= 2 {
+					talker = md5Hash + "@chatroom"
+				}
 			}
 		}
 
-		// 统计消息数
+		// 统计消息数: real_sender_id = 0 表示自己发送的消息
 		query := fmt.Sprintf(`SELECT COUNT(*),
-			SUM(CASE WHEN status = 2 THEN 1 ELSE 0 END),
-			SUM(CASE WHEN status != 2 THEN 1 ELSE 0 END)
-			FROM %s WHERE create_time >= ? AND create_time <= ?`, tableName)
+			SUM(CASE WHEN m.real_sender_id = 0 THEN 1 ELSE 0 END),
+			SUM(CASE WHEN m.real_sender_id != 0 THEN 1 ELSE 0 END)
+			FROM %s m WHERE m.create_time >= ? AND m.create_time <= ?`, tableName)
 		var total, sent, recv sql.NullInt64
 		if err := db.QueryRowContext(ctx, query, start.Unix(), end.Unix()).Scan(&total, &sent, &recv); err == nil {
 			if total.Valid && total.Int64 > 0 {
@@ -224,8 +232,9 @@ func (r *Repository) getAnnualTopContacts(ctx context.Context, start, end time.T
 			tableName := "Msg_" + hex.EncodeToString(hash[:])
 
 			if r.isTableExist(db, tableName) {
+				// real_sender_id = 0 表示自己发送的消息
 				query := fmt.Sprintf(
-					"SELECT CASE WHEN status = 2 THEN 1 ELSE 0 END as is_self, COUNT(*), MAX(create_time) FROM %s WHERE create_time >= ? AND create_time <= ? GROUP BY is_self",
+					"SELECT CASE WHEN real_sender_id = 0 THEN 1 ELSE 0 END as is_self, COUNT(*), MAX(create_time) FROM %s WHERE create_time >= ? AND create_time <= ? GROUP BY is_self",
 					tableName)
 				rows, err := db.QueryContext(ctx, query, start.Unix(), end.Unix())
 				if err == nil {

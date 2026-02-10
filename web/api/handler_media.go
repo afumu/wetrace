@@ -1,7 +1,11 @@
 package api
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/afumu/wetrace/internal/model"
+	"github.com/afumu/wetrace/store/types"
 	"github.com/afumu/wetrace/web/transport"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -88,4 +92,119 @@ func (a *API) HandleStartCache(c *gin.Context) {
 func (a *API) GetCacheStatus(c *gin.Context) {
 	status := a.Media.GetCacheStatus()
 	transport.SendSuccess(c, status)
+}
+
+// imageListQuery 图片列表请求参数
+type imageListQuery struct {
+	Talker    string `form:"talker"`
+	TimeRange string `form:"time_range"`
+	Limit     int    `form:"limit,default=50"`
+	Offset    int    `form:"offset,default=0"`
+}
+
+// imageListItem 图片列表响应项
+type imageListItem struct {
+	Key          string `json:"key"`
+	Talker       string `json:"talker"`
+	TalkerName   string `json:"talkerName"`
+	Time         string `json:"time"`
+	ThumbnailURL string `json:"thumbnailUrl"`
+	Seq          int64  `json:"seq"`
+}
+
+// imageListResponse 图片列表响应
+type imageListResponse struct {
+	Total int              `json:"total"`
+	Items []*imageListItem `json:"items"`
+}
+
+// GetImageList 获取图片列表，支持按会话筛选和时间范围筛选。
+func (a *API) GetImageList(c *gin.Context) {
+	var q imageListQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		transport.BadRequest(c, "无效的请求参数: "+err.Error())
+		return
+	}
+
+	// 解析时间范围
+	var startTime, endTime time.Time
+	startTime, endTime = parseImageTimeRange(q.TimeRange)
+
+	// 构建消息查询：MsgType=3 表示图片消息
+	msgQuery := types.MessageQuery{
+		Talker:    q.Talker,
+		MsgType:   model.MessageTypeImage,
+		StartTime: startTime,
+		EndTime:   endTime,
+		Limit:     200000,
+		Offset:    0,
+	}
+
+	messages, err := a.Store.GetMessages(c.Request.Context(), msgQuery)
+	if err != nil {
+		log.Error().Err(err).Msg("获取图片消息列表失败")
+		transport.InternalServerError(c, "获取图片列表失败。")
+		return
+	}
+
+	// 从消息中提取图片信息
+	allItems := make([]*imageListItem, 0, len(messages))
+	for _, msg := range messages {
+		key := ""
+		if msg.Contents != nil {
+			if md5, ok := msg.Contents["md5"].(string); ok {
+				key = md5
+			}
+		}
+		if key == "" {
+			continue
+		}
+
+		item := &imageListItem{
+			Key:          key,
+			Talker:       msg.Talker,
+			TalkerName:   msg.TalkerName,
+			Time:         msg.Time.Format(time.RFC3339),
+			ThumbnailURL: fmt.Sprintf("/api/v1/media/image/%s", key),
+			Seq:          msg.Seq,
+		}
+		allItems = append(allItems, item)
+	}
+
+	total := len(allItems)
+
+	// 分页
+	start := q.Offset
+	if start > total {
+		start = total
+	}
+	end := start + q.Limit
+	if end > total {
+		end = total
+	}
+	pageItems := allItems[start:end]
+
+	transport.SendSuccess(c, imageListResponse{
+		Total: total,
+		Items: pageItems,
+	})
+}
+
+// parseImageTimeRange 将前端传入的时间范围字符串转换为起止时间。
+func parseImageTimeRange(timeRange string) (start, end time.Time) {
+	now := time.Now()
+	end = now.Add(24 * time.Hour)
+
+	switch timeRange {
+	case "last_week":
+		start = now.AddDate(0, 0, -7)
+	case "last_month":
+		start = now.AddDate(0, -1, 0)
+	case "last_year":
+		start = now.AddDate(-1, 0, 0)
+	default:
+		// "all" 或空值，查询全部
+		start = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+	return
 }

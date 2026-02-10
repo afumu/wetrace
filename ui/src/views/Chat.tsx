@@ -6,6 +6,7 @@ import { useChat } from "@/hooks/useChat"
 import { RefreshCw, ArrowLeft, Smile, PlusCircle, Mic, Download, Sparkles, ImageIcon, BrainCircuit, MessageSquareQuote } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { systemApi, mediaApi } from "@/api"
+import { toast } from "sonner"
 import { aiApi } from "@/api/ai"
 import { useState, useMemo } from "react"
 import { useSessions } from "@/hooks/useSession"
@@ -55,10 +56,10 @@ export default function Chat() {
     try {
       await mediaApi.startCache('session', activeTalker)
       window.dispatchEvent(new CustomEvent('image-cache-start'))
-      alert("会话图片预加载已启动。")
+      toast.success("会话图片预加载已启动。")
     } catch (err) {
       console.error("Failed to start session cache:", err)
-      alert("启动会话缓存失败")
+      toast.error("启动会话缓存失败")
     }
   }
 
@@ -92,12 +93,12 @@ export default function Chat() {
       setIsSyncing(true)
       await systemApi.decrypt()
       // Refresh the page or data? For now just alert success
-      alert("同步成功！")
+      toast.success("同步成功！")
       window.location.reload()
     } catch (error: any) {
       console.error("Sync failed:", error)
       const message = error.message || "同步失败，请检查控制台。"
-      alert(message)
+      toast.error(message)
     } finally {
       setIsSyncing(false)
     }
@@ -120,6 +121,9 @@ export default function Chat() {
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
+    } else if (type === 'forensic') {
+      const url = `/api/v1/export/forensic?talker=${activeTalker}&name=${encodeURIComponent(displayName)}${timeRangeParam}`
+      window.open(url, '_blank')
     } else {
       const formatParam = type !== 'html' ? `&format=${type}` : ''
       const url = `/api/v1/export/chat?talker=${activeTalker}&name=${encodeURIComponent(displayName)}${formatParam}${timeRangeParam}`

@@ -68,10 +68,10 @@ export default function SentimentView() {
       <div className="max-w-5xl mx-auto p-6 space-y-6 pb-20">
         {/* Header */}
         <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-2">
+          <h2 className="text-2xl font-bold tracking-tight">
             AI 情感分析
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground mt-1">
             基于AI分析对话情绪倾向与关系变化趋势
           </p>
         </div>
@@ -92,8 +92,8 @@ export default function SentimentView() {
         {/* Loading */}
         {isAnalyzing && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 className="w-12 h-12 animate-spin text-primary" />
-            <p className="text-muted-foreground animate-pulse font-medium">
+            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-muted-foreground animate-pulse text-sm">
               AI 正在分析对话情感...
             </p>
           </div>
@@ -102,7 +102,7 @@ export default function SentimentView() {
         {/* Error */}
         {error && (
           <Card className="border-destructive/50 bg-destructive/5">
-            <CardContent className="pt-4 pb-4">
+            <CardContent className="p-4">
               <p className="text-destructive text-sm">{error}</p>
             </CardContent>
           </Card>

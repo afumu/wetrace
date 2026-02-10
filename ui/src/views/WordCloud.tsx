@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Cloud, Hash, MessageSquare, Loader2 } from "lucide-react"
+import { Cloud, Hash, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatNumber } from "@/lib/utils"
 
@@ -48,8 +48,8 @@ export default function WordCloudView() {
       <div className="max-w-5xl mx-auto p-6 space-y-6 pb-20">
         {/* Header */}
         <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-2">词云分析</h2>
-          <p className="text-muted-foreground">高频词汇可视化，发现聊天中的关键词</p>
+          <h2 className="text-2xl font-bold tracking-tight">词云分析</h2>
+          <p className="text-sm text-muted-foreground mt-1">高频词汇可视化，发现聊天中的关键词</p>
         </div>
 
         {/* Config */}
@@ -73,15 +73,15 @@ export default function WordCloudView() {
         {/* Loading */}
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 className="w-10 h-10 animate-spin text-primary" />
-            <p className="text-muted-foreground animate-pulse">正在分析词频...</p>
+            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-muted-foreground animate-pulse text-sm">正在分析词频...</p>
           </div>
         )}
 
         {/* Error */}
         {error && (
           <Card className="border-destructive/50 bg-destructive/5">
-            <CardContent className="pt-4 pb-4">
+            <CardContent className="p-4">
               <p className="text-destructive text-sm">加载词云数据失败</p>
             </CardContent>
           </Card>
