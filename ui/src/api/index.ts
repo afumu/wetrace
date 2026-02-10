@@ -5,3 +5,4 @@ export * from './contact';
 export * from './media';
 export * from './system';
 export * from './analysis';
+export * from './ai';

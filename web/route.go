@@ -53,6 +53,13 @@ func (s *Service) setupRoutes() {
 		// 导出路由
 		v1.GET("/export/chat", s.api.ExportChat)
 
+		// AI 路由
+		aiGroup := v1.Group("/ai")
+		{
+			aiGroup.POST("/summarize", s.api.AISummarize)
+			aiGroup.POST("/simulate", s.api.AISimulate)
+		}
+
 		// 分析路由
 		analysisGroup := v1.Group("/analysis")
 		{

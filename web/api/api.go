@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"sync"
 
+	"github.com/afumu/wetrace/internal/ai"
 	"github.com/afumu/wetrace/store"
 	"github.com/afumu/wetrace/web/export"
 	"github.com/afumu/wetrace/web/media"
@@ -15,6 +16,7 @@ type API struct {
 	Media  *media.Service
 	Export *export.Service
 	Conf   *Config
+	AI     *ai.Client
 	mu     sync.Mutex
 }
 
@@ -26,10 +28,20 @@ type Config struct {
 	WechatDataPath  string
 	ImageKey        string
 	XorKey          string
+	AIEnabled       bool
+	AIProvider      string
+	AIAPIKey        string
+	AIBaseURL       string
+	AIModel         string
 }
 
 // NewAPI 创建一个新的 API 处理器。
 func NewAPI(s store.Store, m *media.Service, conf *Config, staticFS fs.FS) *API {
+	var aiClient *ai.Client
+	if conf.AIEnabled {
+		aiClient = ai.NewClient(conf.AIAPIKey, conf.AIBaseURL, conf.AIModel)
+	}
+
 	return &API{
 		Store: s,
 		Media: m,
@@ -39,5 +51,6 @@ func NewAPI(s store.Store, m *media.Service, conf *Config, staticFS fs.FS) *API 
 			StaticFS: staticFS,
 		},
 		Conf: conf,
+		AI:   aiClient,
 	}
 }
