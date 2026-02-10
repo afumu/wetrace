@@ -372,7 +372,15 @@ function SentimentDistributionChart({
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v) => `${v}%`} />
+              <Tooltip content={({ active, payload }) => {
+                if (!active || !payload?.length) return null
+                return (
+                  <div className="bg-background border rounded-lg px-3 py-2 shadow-md text-sm">
+                    <span className="font-medium">{payload[0].name}: </span>
+                    <span>{payload[0].value}%</span>
+                  </div>
+                )
+              }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -464,9 +472,15 @@ function EmotionTimelineChart({
                 style={{ fontSize: "12px" }}
                 tickFormatter={(v) => `${v}`}
               />
-              <Tooltip
-                formatter={(v) => `${v} 分`}
-              />
+              <Tooltip content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null
+                return (
+                  <div className="bg-background border rounded-lg px-3 py-2 shadow-md text-sm">
+                    <p className="text-muted-foreground mb-1">{label}</p>
+                    <p className="font-medium">情感得分: {payload[0].value} 分</p>
+                  </div>
+                )
+              }} />
               <Line
                 type="monotone"
                 dataKey="score"
