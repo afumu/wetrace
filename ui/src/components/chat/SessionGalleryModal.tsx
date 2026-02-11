@@ -219,10 +219,16 @@ function SessionImageLightbox({
       )}
 
       <img
-        src={item.thumbnailUrl}
+        src={item.fullUrl || item.thumbnailUrl}
         alt=""
         className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
         onClick={(e) => e.stopPropagation()}
+        onError={(e) => {
+          const target = e.target as HTMLImageElement
+          if (item.thumbnailUrl && target.src !== item.thumbnailUrl && !target.src.endsWith(item.thumbnailUrl)) {
+            target.src = item.thumbnailUrl
+          }
+        }}
       />
 
       {hasNext && (

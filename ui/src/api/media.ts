@@ -87,5 +87,6 @@ export interface ImageListItem {
   talkerName: string;
   time: string;
   thumbnailUrl: string;
+  fullUrl: string;
   seq: number;
 }

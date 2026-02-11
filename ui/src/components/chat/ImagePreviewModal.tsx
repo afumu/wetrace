@@ -98,6 +98,13 @@ export function ImagePreviewModal() {
               src={imageUrl}
               alt="Preview"
               className="max-w-[calc(100vw-200px)] max-h-[85vh] object-contain shadow-[0_0_50px_rgba(0,0,0,0.6)] ring-1 ring-white/10 transition-all duration-300 rounded-sm bg-black/20"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement
+                const thumbUrl = currentImage.md5 ? mediaApi.getThumbnailUrl(currentImage.md5, currentImage.path) : ""
+                if (thumbUrl && target.src !== thumbUrl && !target.src.endsWith(thumbUrl)) {
+                   target.src = thumbUrl
+                }
+              }}
             />
           </div>
 

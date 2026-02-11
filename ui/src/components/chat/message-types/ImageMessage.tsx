@@ -50,7 +50,10 @@ export function ImageMessage({ id, md5, path, content }: ImageMessageProps) {
             loaded ? "opacity-100" : "opacity-0"
           )}
           onLoad={() => setLoaded(true)}
-          onError={() => setError(true)}
+          onError={() => {
+            setError(true)
+            setLoaded(true) // Stop pulse
+          }}
           onClick={() => id && openPreview(id)}
         />
       )}

@@ -175,8 +175,10 @@ func (a *API) GetImageList(c *gin.Context) {
 			}
 		}
 		thumbnailURL := fmt.Sprintf("/api/v1/media/image/%s?thumb=1", key)
+		fullURL := fmt.Sprintf("/api/v1/media/image/%s", key)
 		if path != "" {
 			thumbnailURL += "&path=" + url.QueryEscape(path)
+			fullURL += "?path=" + url.QueryEscape(path)
 		}
 
 		item := &imageListItem{
@@ -185,6 +187,7 @@ func (a *API) GetImageList(c *gin.Context) {
 			TalkerName:   msg.TalkerName,
 			Time:         msg.Time.Format(time.RFC3339),
 			ThumbnailURL: thumbnailURL,
+			FullURL:      fullURL,
 			Seq:          msg.Seq,
 		}
 		allItems = append(allItems, item)
@@ -359,6 +362,10 @@ func (a *API) buildCacheImageItem(path, cacheBaseDir string, info os.FileInfo) *
 		url.PathEscape(baseName),
 		url.QueryEscape(datRelPath),
 	)
+	fullURL := fmt.Sprintf("/api/v1/media/image/%s?path=%s",
+		url.PathEscape(baseName),
+		url.QueryEscape(datRelPath),
+	)
 
 	return &imageListItem{
 		Key:          baseName,
@@ -366,6 +373,7 @@ func (a *API) buildCacheImageItem(path, cacheBaseDir string, info os.FileInfo) *
 		TalkerName:   talkerHash,
 		Time:         info.ModTime().Format(time.RFC3339),
 		ThumbnailURL: thumbnailURL,
+		FullURL:      fullURL,
 		Seq:          info.ModTime().UnixMilli(),
 	}
 }

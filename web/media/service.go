@@ -290,23 +290,46 @@ func (s *Service) Prepare(media *model.Media, isThumb bool) PreparedMedia {
 
 func (s *Service) prepareImageWithFallback(relativePath string, isThumb bool) PreparedMedia {
 	var candidates []string
+
+	ext := strings.ToLower(filepath.Ext(relativePath))
+	base := relativePath
+	if ext == ".dat" {
+		base = strings.TrimSuffix(relativePath, ext)
+	}
+	// 如果本身已经是 _t 结尾，也去掉以便统一构造
+	if strings.HasSuffix(strings.ToLower(base), "_t") {
+		base = strings.TrimSuffix(base, base[len(base)-2:])
+	}
+
 	if isThumb {
 		// 缩略图模式优先级：_t.dat -> .dat -> 原路径
 		candidates = []string{
-			relativePath + "_t.dat",
-			relativePath + ".dat",
+			base + "_t.dat",
+			base + ".dat",
+			base,
 			relativePath,
 		}
 	} else {
 		// 原图模式优先级：.dat -> 原路径 -> _t.dat (回退)
 		candidates = []string{
-			relativePath + ".dat",
+			base + ".dat",
+			base,
 			relativePath,
-			relativePath + "_t.dat",
+			base + "_t.dat",
 		}
 	}
 
+	// 去重并过滤空
+	seen := make(map[string]bool)
+	uniqueCandidates := make([]string, 0, len(candidates))
 	for _, c := range candidates {
+		if c != "" && !seen[c] {
+			seen[c] = true
+			uniqueCandidates = append(uniqueCandidates, c)
+		}
+	}
+
+	for _, c := range uniqueCandidates {
 		abs := filepath.Join(s.WechatDbSrcPath, c)
 		res := s.doPrepareFile(abs, false)
 		if res.Error == nil {
