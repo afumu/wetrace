@@ -141,14 +141,21 @@ func (r *Repository) enrichMessages(ctx context.Context, msgs []*model.Message) 
 
 func (r *Repository) queryV4Messages(ctx context.Context, db *sql.DB, tableName, talker string, q types.MessageQuery) ([]*model.Message, error) {
 	query := fmt.Sprintf(`
-		SELECT m.sort_seq, m.server_id, m.local_type, n.user_name, m.create_time, m.message_content, m.packed_info_data, m.status
+		SELECT m.sort_seq, m.server_id, m.local_type, n.user_name, m.create_time, m.message_content, m.compress_content, m.packed_info_data, m.status
 		FROM %s m
 		LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid
 		WHERE m.create_time >= ? AND m.create_time <= ?
-		ORDER BY m.sort_seq ASC
 	`, tableName)
+	args := []interface{}{q.StartTime.Unix(), q.EndTime.Unix()}
 
-	rows, err := db.QueryContext(ctx, query, q.StartTime.Unix(), q.EndTime.Unix())
+	if q.MsgType != 0 {
+		query += " AND m.local_type = ?"
+		args = append(args, q.MsgType)
+	}
+
+	query += " ORDER BY m.sort_seq ASC"
+
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +171,7 @@ func (r *Repository) queryV4Messages(ctx context.Context, db *sql.DB, tableName,
 			&msg.UserName,
 			&msg.CreateTime,
 			&msg.MessageContent,
+			&msg.CompressContent,
 			&msg.PackedInfoData,
 			&msg.Status,
 		)
@@ -236,6 +244,11 @@ func (r *Repository) buildV3MessageQuery(target bind.RouteResult, q types.Messag
 		WHERE Sequence >= ? AND Sequence <= ?
 	`)
 	args = append(args, q.StartTime.Unix()*1000, q.EndTime.Unix()*1000)
+
+	if q.MsgType != 0 {
+		sb.WriteString(" AND Type = ?")
+		args = append(args, q.MsgType)
+	}
 
 	if target.TalkerID != 0 {
 		sb.WriteString(" AND TalkerId = ?")

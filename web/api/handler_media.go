@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -427,35 +428,71 @@ func (a *API) TranscribeVoice(c *gin.Context) {
 	transport.SendSuccess(c, gin.H{"text": text})
 }
 
+// ExportVoicesRequest 语音导出请求体
+type ExportVoicesRequest struct {
+	Talker string   `json:"talker"`
+	Name   string   `json:"name"`
+	IDs    []string `json:"ids"`
+}
+
 // ExportVoices 一键导出会话中的所有语音消息为 ZIP 包（每条语音为独立 MP3 文件）
 func (a *API) ExportVoices(c *gin.Context) {
-	talker := c.Query("talker")
-	if talker == "" {
+	var req ExportVoicesRequest
+
+	// 尝试解析 JSON (针对 POST)
+	if c.Request.Method == http.MethodPost {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Warn().Err(err).Msg("解析导出语音 JSON 请求失败")
+		}
+	}
+
+	// 如果 JSON 没解析到，或者通过 GET 访问，则从 Query 获取
+	if req.Talker == "" {
+		req.Talker = c.Query("talker")
+	}
+	if req.Name == "" {
+		req.Name = c.Query("name")
+	}
+
+	if req.Talker == "" {
 		transport.BadRequest(c, "talker 参数不能为空")
 		return
 	}
-	name := c.Query("name")
-	if name == "" {
-		name = talker
+	if req.Name == "" {
+		req.Name = req.Talker
 	}
 
-	// 查询该会话的所有语音消息
-	msgQuery := types.MessageQuery{
-		Talker:  talker,
-		MsgType: model.MessageTypeVoice,
-		Limit:   100000,
-		Offset:  0,
-	}
+	var messages []*model.Message
 
-	messages, err := a.Store.GetMessages(c.Request.Context(), msgQuery)
-	if err != nil {
-		log.Error().Err(err).Str("talker", talker).Msg("查询语音消息失败")
-		transport.InternalServerError(c, "查询语音消息失败")
-		return
+	// 如果前端传了具体的 IDs，我们直接构造虚拟消息来复用导出逻辑
+	if len(req.IDs) > 0 {
+		log.Info().Str("talker", req.Talker).Int("id_count", len(req.IDs)).Msg("根据前端提供的 ID 列表导出语音")
+		for _, id := range req.IDs {
+			messages = append(messages, &model.Message{
+				Type:     model.MessageTypeVoice,
+				Talker:   req.Talker,
+				Contents: map[string]interface{}{"voice": id},
+				Time:     time.Now(), // 占位
+			})
+		}
+	} else {
+		// 回退逻辑：查询该会话的所有消息 (兼容旧模式)
+		msgQuery := types.MessageQuery{
+			Talker: req.Talker,
+			Limit:  200000,
+			Offset: 0,
+		}
+		var err error
+		messages, err = a.Store.GetMessages(c.Request.Context(), msgQuery)
+		if err != nil {
+			log.Error().Err(err).Str("talker", req.Talker).Msg("查询消息失败")
+			transport.InternalServerError(c, "查询消息失败")
+			return
+		}
 	}
 
 	if len(messages) == 0 {
-		transport.BadRequest(c, "该会话没有语音消息")
+		transport.BadRequest(c, "未找到任何语音消息")
 		return
 	}
 
@@ -464,73 +501,82 @@ func (a *API) ExportVoices(c *gin.Context) {
 	zipWriter := zip.NewWriter(&buf)
 
 	voiceCount := 0
-	for i, msg := range messages {
-		// 获取语音 key
+	for _, msg := range messages {
 		voiceKey := ""
 		if msg.Contents != nil {
 			if v, ok := msg.Contents["voice"]; ok {
 				voiceKey = fmt.Sprint(v)
 			}
 		}
+
 		if voiceKey == "" {
 			continue
 		}
 
-		// 从 store 获取语音媒体数据
-		mediaInfo, err := a.Store.GetMedia(c.Request.Context(), "voice", voiceKey)
-		if err != nil {
-			log.Warn().Err(err).Str("key", voiceKey).Msg("获取语音媒体失败，跳过")
+		var mediaInfo *model.Media
+		var err error
+
+		// 优先从消息自带的原始数据中获取 (针对 V3 等直接存储在消息表的情况)
+		if msg.Contents != nil {
+			if rawData, ok := msg.Contents["_raw_data"].([]byte); ok && len(rawData) > 0 {
+				mediaInfo = &model.Media{
+					Type: "voice",
+					Key:  voiceKey,
+					Data: rawData,
+				}
+			}
+		}
+
+		// 如果没有自带数据，则从存储层获取
+		if mediaInfo == nil && voiceKey != "" {
+			mediaInfo, err = a.Store.GetMedia(c.Request.Context(), "voice", voiceKey)
+			if err != nil {
+				continue
+			}
+		}
+
+		if mediaInfo == nil {
 			continue
 		}
 
-		// 使用媒体服务解码语音
 		prepared := a.Media.Prepare(mediaInfo, false)
 		if prepared.Error != nil || len(prepared.Content) == 0 {
-			log.Warn().Str("key", voiceKey).Msg("语音解码失败或为空，跳过")
 			continue
 		}
 
-		// 确定文件扩展名
 		ext := ".mp3"
 		if prepared.ContentType == "audio/silk" {
 			ext = ".silk"
 		}
 
-		// 构造文件名：序号_发送者_时间.mp3
-		timeStr := msg.Time.Format("20060102_150405")
-		senderName := msg.SenderName
-		if senderName == "" {
-			senderName = msg.Sender
+		// 文件名构造
+		fileName := fmt.Sprintf("%03d_%s%s", voiceCount+1, voiceKey, ext)
+		if !msg.Time.IsZero() && msg.Time.Year() > 2000 {
+			// 如果有具体的消息时间（如从数据库查到的），使用更友好的命名
+			timeStr := msg.Time.Format("20060102_150405")
+			sender := msg.SenderName
+			if sender == "" {
+				sender = msg.Sender
+			}
+			fileName = fmt.Sprintf("%03d_%s_%s%s", voiceCount+1, sanitizeFileName(sender), timeStr, ext)
 		}
-		// 清理文件名中的非法字符
-		senderName = sanitizeFileName(senderName)
-		fileName := fmt.Sprintf("%03d_%s_%s%s", i+1, senderName, timeStr, ext)
 
-		// 写入 ZIP
 		w, err := zipWriter.Create(fileName)
 		if err != nil {
-			log.Warn().Err(err).Str("file", fileName).Msg("创建 ZIP 条目失败")
 			continue
 		}
-		if _, err := w.Write(prepared.Content); err != nil {
-			log.Warn().Err(err).Str("file", fileName).Msg("写入 ZIP 条目失败")
-			continue
-		}
+		w.Write(prepared.Content)
 		voiceCount++
 	}
 
-	if err := zipWriter.Close(); err != nil {
-		transport.InternalServerError(c, "生成 ZIP 文件失败")
-		return
-	}
+	zipWriter.Close()
 
 	if voiceCount == 0 {
-		transport.BadRequest(c, "没有可导出的语音文件")
+		transport.BadRequest(c, "该会话共找到 "+fmt.Sprintf("%d", len(messages))+" 条疑似语音记录，但无法获取到原始数据")
 		return
 	}
 
-	// 设置响应头并发送 ZIP
-	zipName := fmt.Sprintf("voices_%s_%s.zip", sanitizeFileName(name), time.Now().Format("20060102"))
+	zipName := fmt.Sprintf("voices_%s_%s.zip", sanitizeFileName(req.Name), time.Now().Format("20060102"))
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipName))
 	c.Header("Content-Type", "application/zip")
 	c.Data(200, "application/zip", buf.Bytes())

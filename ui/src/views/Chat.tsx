@@ -256,13 +256,41 @@ export default function Chat() {
                         </button>
                         <button
                           className="w-full px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
-                          onClick={() => {
-                            if (activeTalker) {
-                              const url = mediaApi.getExportVoicesUrl(activeTalker, displayName)
-                              window.open(url, '_blank')
-                              toast.success("语音导出已开始，请稍候...")
-                            }
+                          onClick={async () => {
+                            if (!activeTalker) return
                             setShowMoreMenu(false)
+                            
+                            const voiceIds = allMessages
+                              .filter(msg => msg.type === 34 && msg.contents?.voice)
+                              .map(msg => String(msg.contents!.voice))
+
+                            if (voiceIds.length === 0) {
+                              toast.error("当前页面未发现语音消息")
+                              return
+                            }
+
+                            const loadingToast = toast.loading(`正在准备导出 ${voiceIds.length} 条语音...`)
+                            try {
+                              const blob = await mediaApi.exportVoices({
+                                talker: activeTalker,
+                                name: displayName,
+                                ids: voiceIds
+                              })
+                              
+                              const url = window.URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url
+                              a.download = `voices_${displayName}_${new Date().toISOString().split('T')[0]}.zip`
+                              document.body.appendChild(a)
+                              a.click()
+                              window.URL.revokeObjectURL(url)
+                              document.body.removeChild(a)
+                              
+                              toast.success("语音导出成功", { id: loadingToast })
+                            } catch (err: any) {
+                              console.error("Export voices failed:", err)
+                              toast.error(`导出失败: ${err.message}`, { id: loadingToast })
+                            }
                           }}
                         >
                           <Mic className="w-4 h-4" />

@@ -34,14 +34,15 @@ import (
 // WCDB_CT_source INTEGER DEFAULT NULL
 // )
 type MessageV4 struct {
-	SortSeq        int64  `json:"sort_seq"`         // 消息序号，10位时间戳 + 3位序号
-	ServerID       int64  `json:"server_id"`        // 消息 ID，用于关联 voice
-	LocalType      int64  `json:"local_type"`       // 消息类型
-	UserName       string `json:"user_name"`        // 发送人，通过 Join Name2Id 表获得
-	CreateTime     int64  `json:"create_time"`      // 消息创建时间，10位时间戳
-	MessageContent []byte `json:"message_content"`  // 消息内容，文字聊天内容 或 zstd 压缩内容
-	PackedInfoData []byte `json:"packed_info_data"` // 额外数据，类似 proto，格式与 v3 有差异
-	Status         int    `json:"status"`           // 消息状态，2 是已发送，4 是已接收，可以用于判断 IsSender（FIXME 不准, 需要判断 UserName）
+	SortSeq         int64  `json:"sort_seq"`         // 消息序号，10位时间戳 + 3位序号
+	ServerID        int64  `json:"server_id"`        // 消息 ID，用于关联 voice
+	LocalType       int64  `json:"local_type"`       // 消息类型
+	UserName        string `json:"user_name"`        // 发送人，通过 Join Name2Id 表获得
+	CreateTime      int64  `json:"create_time"`      // 消息创建时间，10位时间戳
+	MessageContent  []byte `json:"message_content"`  // 消息内容，文字聊天内容 或 zstd 压缩内容
+	CompressContent []byte `json:"compress_content"` // 非文字内容 (V4 中可能包含语音数据)
+	PackedInfoData  []byte `json:"packed_info_data"` // 额外数据，类似 proto，格式与 v3 有差异
+	Status          int    `json:"status"`           // 消息状态，2 是已发送，4 是已接收，可以用于判断 IsSender（FIXME 不准, 需要判断 UserName）
 }
 
 func (m *MessageV4) Wrap(talker string) *Message {
@@ -89,6 +90,9 @@ func (m *MessageV4) Wrap(talker string) *Message {
 	// 语音消息
 	if _m.Type == 34 {
 		_m.Contents["voice"] = fmt.Sprint(m.ServerID)
+		if len(m.CompressContent) > 0 {
+			_m.Contents["_raw_data"] = m.CompressContent
+		}
 	}
 
 	if len(m.PackedInfoData) != 0 {

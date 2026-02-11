@@ -97,8 +97,13 @@ service.interceptors.request.use(
 
 service.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
-    const { data } = response
+    const { data, config } = response
     
+    // For blob or arraybuffer, return raw data directly
+    if (config.responseType === 'blob' || config.responseType === 'arraybuffer') {
+      return data
+    }
+
     // Handle backend response format: { success: true, data: ... }
     if (data && typeof data === 'object' && 'success' in data) {
       if (data.success) {

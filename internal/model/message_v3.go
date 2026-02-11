@@ -82,6 +82,9 @@ func (m *MessageV3) Wrap() *Message {
 	// 语音消息
 	if _m.Type == 34 {
 		_m.Contents["voice"] = fmt.Sprint(m.MsgSvrID)
+		if len(m.CompressContent) > 0 {
+			_m.Contents["_raw_data"] = m.CompressContent
+		}
 	}
 
 	if len(m.BytesExtra) != 0 {

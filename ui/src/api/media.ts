@@ -79,6 +79,10 @@ export const mediaApi = {
     }
     return url
   },
+
+  exportVoices: (params: { talker: string; name?: string; ids: string[] }) => {
+    return request.post<Blob>('/api/v1/export/voices', params, { responseType: 'blob' })
+  },
 }
 
 export interface ImageListItem {

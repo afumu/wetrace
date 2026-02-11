@@ -97,6 +97,7 @@ func (s *Service) setupRoutes() {
 		v1.GET("/export/chat", s.api.ExportChat)
 		v1.GET("/export/forensic", s.api.ExportForensic)
 		v1.GET("/export/voices", s.api.ExportVoices)
+		v1.POST("/export/voices", s.api.ExportVoices)
 
 		// 搜索路由
 		searchGroup := v1.Group("/search")
