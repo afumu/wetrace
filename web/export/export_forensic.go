@@ -7,30 +7,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"html/template"
+	"strings"
 	"time"
 
-	"github.com/afumu/wetrace/internal/model"
 	"github.com/afumu/wetrace/store/types"
 	"github.com/rs/zerolog/log"
 )
 
-// ForensicMetadata holds the metadata for a forensic export package.
-type ForensicMetadata struct {
-	ExportTime      string            `json:"export_time"`
-	SoftwareVersion string            `json:"software_version"`
-	Talker          string            `json:"talker"`
-	TalkerName      string            `json:"talker_name"`
-	TimeRange       map[string]string `json:"time_range"`
-	MessageCount    int               `json:"message_count"`
-	Files           map[string]string `json:"files"`
-}
-
-// ExportForensic generates a forensic export ZIP containing:
-// - report.html (evidence-grade HTML report with watermark)
-// - chat_data.csv (raw chat data)
-// - checksums.sha256 (SHA-256 hashes of all files)
-// - metadata.json (export context metadata)
+// ExportForensic 重新实现：复用精美版 HTML，增加专业取证特性
 func (s *Service) ExportForensic(ctx context.Context, talker string, talkerName string, startTime, endTime time.Time) ([]byte, error) {
 	query := types.MessageQuery{
 		Talker:    talker,
@@ -44,600 +28,141 @@ func (s *Service) ExportForensic(ctx context.Context, talker string, talkerName 
 		return nil, err
 	}
 
-	log.Info().Int("count", len(messages)).Str("talker", talkerName).Msg("ExportForensic processing")
+	log.Info().Int("count", len(messages)).Str("talker", talkerName).Msg("ExportForensic processing (Beautiful HTML Mode)")
 
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+
+	// 1. 处理媒体文件并注入 _url 到消息内容中 (复用核心逻辑)
+	for _, msg := range messages {
+		s.processMedia(ctx, zw, msg)
+	}
+
+	// 2. 生成 data.js
+	msgJson, _ := json.Marshal(messages)
+	dataJs := fmt.Sprintf("window.CHAT_DATA = %s;", string(msgJson))
+	fData, _ := zw.Create("data.js")
+	fData.Write([]byte(dataJs))
+
+	// 3. 生成增强取证特性的 index.html
 	exportTime := time.Now()
+	reportID := fmt.Sprintf("FORENSIC-%s-%s", exportTime.Format("20060102150405"), fmt.Sprintf("%x", sha256.Sum256([]byte(talker+exportTime.String())))[:6])
 
-	// 1. Generate CSV data
-	csvData, err := s.ExportChatCSV(ctx, talker, talkerName, startTime, endTime)
+	// 计算数据指纹
+	h := sha256.New()
+	h.Write(msgJson)
+	dataHash := fmt.Sprintf("%x", h.Sum(nil))
+
+	html, err := s.buildForensicBeautifulHTML(talkerName, talker, reportID, exportTime, startTime, endTime, len(messages), dataHash)
 	if err != nil {
-		return nil, fmt.Errorf("生成CSV数据失败: %w", err)
+		return nil, err
 	}
+	fHtml, _ := zw.Create("index.html")
+	fHtml.Write([]byte(html))
 
-	// 2. Generate forensic HTML report (replaces PDF)
-	htmlData, err := s.buildForensicHTML(talkerName, talker, exportTime, startTime, endTime, messages)
-	if err != nil {
-		return nil, fmt.Errorf("生成取证HTML报告失败: %w", err)
+	// 4. 生成 metadata.json
+	metadata := map[string]interface{}{
+		"type":             "forensic_report",
+		"report_id":        reportID,
+		"export_time":      exportTime.Format(time.RFC3339),
+		"talker":           talker,
+		"talker_name":      talkerName,
+		"message_count":    len(messages),
+		"data_fingerprint": dataHash,
 	}
+	metaJson, _ := json.MarshalIndent(metadata, "", "  ")
+	fMeta, _ := zw.Create("metadata.json")
+	fMeta.Write(metaJson)
 
-	// 3. Calculate SHA-256 checksums
-	fileChecksums := map[string]string{
-		"report.html":   fmt.Sprintf("%x", sha256.Sum256(htmlData)),
-		"chat_data.csv": fmt.Sprintf("%x", sha256.Sum256(csvData)),
-	}
+	// 5. 复制静态资源
+	s.copyAssets(zw)
 
-	// 4. Build metadata.json
-	metadata := ForensicMetadata{
-		ExportTime:      exportTime.Format(time.RFC3339),
-		SoftwareVersion: "1.0.0",
-		Talker:          talker,
-		TalkerName:      talkerName,
-		TimeRange: map[string]string{
-			"start": startTime.Format(time.RFC3339),
-			"end":   endTime.Format(time.RFC3339),
-		},
-		MessageCount: len(messages),
-		Files: map[string]string{
-			"report.html":   "sha256:" + fileChecksums["report.html"],
-			"chat_data.csv": "sha256:" + fileChecksums["chat_data.csv"],
-		},
-	}
-	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("生成metadata失败: %w", err)
-	}
-
-	// 5. Build checksums.sha256 file
-	var checksumBuf bytes.Buffer
-	for name, hash := range fileChecksums {
-		fmt.Fprintf(&checksumBuf, "%s  %s\n", hash, name)
-	}
-	metaHash := fmt.Sprintf("%x", sha256.Sum256(metadataJSON))
-	fmt.Fprintf(&checksumBuf, "%s  %s\n", metaHash, "metadata.json")
-
-	// 6. Pack everything into a ZIP
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-
-	zipFiles := map[string][]byte{
-		"report.html":     htmlData,
-		"chat_data.csv":   csvData,
-		"metadata.json":   metadataJSON,
-		"checksums.sha256": checksumBuf.Bytes(),
-	}
-	for name, data := range zipFiles {
-		f, err := zw.Create(name)
-		if err != nil {
-			return nil, fmt.Errorf("创建ZIP条目失败: %w", err)
-		}
-		if _, err := f.Write(data); err != nil {
-			return nil, fmt.Errorf("写入ZIP条目失败: %w", err)
-		}
-	}
-
-	if err := zw.Close(); err != nil {
-		return nil, fmt.Errorf("关闭ZIP失败: %w", err)
-	}
-
-	return zipBuf.Bytes(), nil
-}
-
-// forensicDateGroup groups messages by date for the HTML template.
-type forensicDateGroup struct {
-	Date     string
-	Messages []forensicMsg
-}
-
-// forensicMsg holds a single message for the HTML template.
-type forensicMsg struct {
-	Time    string
-	Sender  string
-	Content string
-	IsSelf  bool
-	TypeIcon string // message type icon (emoji/text indicator)
-}
-
-// forensicMsgTypeStat holds message type statistics for the summary table.
-type forensicMsgTypeStat struct {
-	TypeName string
-	Count    int
-}
-
-// forensicTemplateData holds all data passed to the HTML template.
-type forensicTemplateData struct {
-	Title        string
-	ReportID     string
-	ExportTime   string
-	TalkerName   string
-	Talker       string
-	StartTime    string
-	EndTime      string
-	MessageCount int
-	DateGroups   []forensicDateGroup
-	// Data summary fields
-	Participants  []string
-	TypeStats     []forensicMsgTypeStat
-	FirstMsgTime  string
-	LastMsgTime   string
-	WatermarkItems []struct{} // fixed-size slice to drive watermark repetition
-}
-
-// buildForensicHTML generates an evidence-grade HTML report with watermark,
-// header, metadata, chat records grouped by date, integrity verification,
-// and signature area.
-func (s *Service) buildForensicHTML(talkerName, talker string, exportTime, startTime, endTime time.Time, messages []*model.Message) ([]byte, error) {
-	reportID := fmt.Sprintf("WT-%s-%s", exportTime.Format("20060102150405"), fmt.Sprintf("%x", sha256.Sum256([]byte(talker+exportTime.String())))[:8])
-
-	// Group messages by date
-	dateGroups := s.groupMessagesByDate(messages)
-
-	// Compute participants and type statistics
-	participantSet := make(map[string]struct{})
-	typeCounts := make(map[string]int)
-	var firstMsgTime, lastMsgTime string
-	for i, msg := range messages {
-		sender := msg.SenderName
-		if sender == "" {
-			sender = msg.Sender
-		}
-		participantSet[sender] = struct{}{}
-		typeName := msgTypeName(msg.Type)
-		typeCounts[typeName]++
-		if i == 0 {
-			firstMsgTime = msg.Time.Format("2006-01-02 15:04:05")
-		}
-		if i == len(messages)-1 {
-			lastMsgTime = msg.Time.Format("2006-01-02 15:04:05")
-		}
-	}
-	participants := make([]string, 0, len(participantSet))
-	for p := range participantSet {
-		participants = append(participants, p)
-	}
-	typeStats := make([]forensicMsgTypeStat, 0, len(typeCounts))
-	for name, count := range typeCounts {
-		typeStats = append(typeStats, forensicMsgTypeStat{TypeName: name, Count: count})
-	}
-
-	data := forensicTemplateData{
-		Title:        "WeTrace 取证报告",
-		ReportID:     reportID,
-		ExportTime:   exportTime.Format("2006-01-02 15:04:05"),
-		TalkerName:   talkerName,
-		Talker:       talker,
-		StartTime:    startTime.Format("2006-01-02 15:04:05"),
-		EndTime:      endTime.Format("2006-01-02 15:04:05"),
-		MessageCount: len(messages),
-		DateGroups:   dateGroups,
-		Participants: participants,
-		TypeStats:    typeStats,
-		FirstMsgTime: firstMsgTime,
-		LastMsgTime:  lastMsgTime,
-		WatermarkItems: make([]struct{}, 60),
-	}
-
-	tmpl, err := template.New("forensic").Parse(forensicHTMLTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("解析HTML模板失败: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return nil, fmt.Errorf("渲染HTML模板失败: %w", err)
-	}
-
+	zw.Close()
 	return buf.Bytes(), nil
 }
 
-// groupMessagesByDate groups messages into date-based groups for display.
-func (s *Service) groupMessagesByDate(messages []*model.Message) []forensicDateGroup {
-	var groups []forensicDateGroup
-	currentDate := ""
+// buildForensicBeautifulHTML 在基础 HTML 模板上注入取证样式和内容
+func (s *Service) buildForensicBeautifulHTML(talkerName, talker, reportID string, exportTime, startTime, endTime time.Time, count int, dataHash string) (string, error) {
+	html := exportTemplate
 
-	for _, msg := range messages {
-		dateStr := msg.Time.Format("2006-01-02")
+	// 1. 注入 CSS 样式 (水印 + 取证卡片)
+	forensicStyles := `
+        /* 专业取证水印 */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 9999;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-weight='bold' font-size='12' fill='rgba(150, 0, 0, 0.04)' text-anchor='middle' transform='rotate(-30 200 150)'%3E取证证据 FORENSIC - ` + reportID + ` - ` + exportTime.Format("2006/01/02") + `%3C/text%3E%3C/svg%3E");
+            background-repeat: repeat;
+        }
 
-		sender := msg.SenderName
-		if sender == "" {
-			sender = msg.Sender
-		}
-		msg.SetContent("host", "127.0.0.1:5200/api/v1/media")
-		content := msg.PlainTextContent()
+        /* 取证摘要卡片 */
+        .forensic-summary {
+            background: #fff;
+            margin: 20px 30px 10px;
+            padding: 24px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            border-left: 5px solid #1a1a2e;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+        }
+        .forensic-summary h2 { 
+            font-size: 18px; color: #1a1a2e; margin-bottom: 15px; 
+            display: flex; align-items: center; gap: 10px;
+        }
+        .forensic-summary .grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+        }
+        .forensic-summary .item { font-size: 13px; color: #666; }
+        .forensic-summary .label { font-weight: bold; color: #333; margin-right: 8px; }
+        .forensic-summary .hash { 
+            grid-column: span 2; margin-top: 8px; padding: 8px; 
+            background: #f8f9fa; border-radius: 4px; font-family: monospace; 
+            font-size: 11px; color: #888; border: 1px dashed #ddd;
+            word-break: break-all;
+        }
 
-		fMsg := forensicMsg{
-			Time:     msg.Time.Format("15:04:05"),
-			Sender:   sender,
-			Content:  content,
-			IsSelf:   msg.IsSelf,
-			TypeIcon: msgTypeIcon(msg.Type),
-		}
+        .forensic-footer {
+            margin: 40px 30px; padding: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center; font-size: 12px; color: #999;
+            flex-shrink: 0;
+        }
+    `
+	html = strings.Replace(html, "<!-- CSS_PLACEHOLDER -->", "<style>"+forensicStyles+"</style>", 1)
 
-		if dateStr != currentDate {
-			currentDate = dateStr
-			groups = append(groups, forensicDateGroup{
-				Date:     dateStr,
-				Messages: []forensicMsg{fMsg},
-			})
-		} else if len(groups) > 0 {
-			groups[len(groups)-1].Messages = append(groups[len(groups)-1].Messages, fMsg)
-		}
-	}
-
-	return groups
-}
-
-// msgTypeName returns a human-readable Chinese name for a message type.
-func msgTypeName(t int64) string {
-	switch t {
-	case 1:
-		return "文本"
-	case 3:
-		return "图片"
-	case 34:
-		return "语音"
-	case 42:
-		return "名片"
-	case 43:
-		return "视频"
-	case 47:
-		return "动画表情"
-	case 48:
-		return "位置"
-	case 49:
-		return "分享/文件"
-	case 50:
-		return "语音通话"
-	case 10000:
-		return "系统消息"
-	default:
-		return "其他"
-	}
-}
-
-// msgTypeIcon returns a CSS class-friendly type indicator for a message type.
-func msgTypeIcon(t int64) string {
-	switch t {
-	case 1:
-		return "text"
-	case 3:
-		return "image"
-	case 34:
-		return "voice"
-	case 42:
-		return "card"
-	case 43:
-		return "video"
-	case 47:
-		return "emoji"
-	case 48:
-		return "location"
-	case 49:
-		return "share"
-	case 50:
-		return "voip"
-	case 10000:
-		return "system"
-	default:
-		return "other"
-	}
-}
-
-// forensicHTMLTemplate is the embedded HTML template for forensic reports.
-const forensicHTMLTemplate = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{.Title}} - {{.ReportID}}</title>
-<style>
-/* === Base Reset === */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
-    background: #f0f2f5; color: #1a1a2e; line-height: 1.6; position: relative;
-}
-
-/* === Watermark Overlay === */
-.watermark {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 9999; pointer-events: none; overflow: hidden;
-}
-.watermark-inner {
-    position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
-    gap: 60px 80px; transform: rotate(-35deg);
-}
-.watermark-inner span {
-    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
-    font-size: 16px; font-weight: 700; color: rgba(180,40,40,0.055);
-    white-space: nowrap; user-select: none;
-}
-
-/* === Page Container === */
-.page { max-width: 900px; margin: 40px auto; padding: 0; }
-
-/* === Report Header === */
-.report-header {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    color: #fff; padding: 50px 60px; border-radius: 8px 8px 0 0;
-    position: relative; overflow: hidden;
-}
-.report-header::after {
-    content: "FORENSIC"; position: absolute; right: -20px; bottom: -10px;
-    font-size: 120px; font-weight: 900; opacity: 0.04; letter-spacing: 8px;
-}
-.report-header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-.report-header .subtitle { font-size: 14px; opacity: 0.7; }
-.report-header .report-id {
-    display: inline-block; margin-top: 16px; padding: 6px 16px;
-    background: rgba(255,255,255,0.12); border-radius: 4px;
-    font-family: "Courier New", monospace; font-size: 13px; letter-spacing: 1px;
-}
-
-/* === Content Body === */
-.report-body {
-    background: #fff; padding: 50px 60px; border-radius: 0 0 8px 8px;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.06);
-}
-
-/* === Section === */
-.section { margin-bottom: 40px; }
-.section-title {
-    font-size: 18px; font-weight: 700; color: #1a1a2e;
-    padding-bottom: 12px; margin-bottom: 20px;
-    border-bottom: 2px solid #e8e8e8; position: relative;
-}
-.section-title::before {
-    content: ""; position: absolute; bottom: -2px; left: 0;
-    width: 60px; height: 2px; background: #0f3460;
-}
-
-/* === Metadata Table === */
-.meta-table { width: 100%; border-collapse: collapse; }
-.meta-table td {
-    padding: 10px 16px; border: 1px solid #e8e8e8; font-size: 14px;
-}
-.meta-table td:first-child {
-    width: 160px; background: #f8f9fa; font-weight: 600; color: #555;
-    white-space: nowrap;
-}
-
-/* === Chat Records === */
-.date-group { margin-bottom: 24px; }
-.date-header {
-    text-align: center; margin: 20px 0 16px; position: relative;
-}
-.date-header::before {
-    content: ""; position: absolute; top: 50%; left: 0; right: 0;
-    height: 1px; background: #e0e0e0;
-}
-.date-header span {
-    position: relative; background: #fff; padding: 0 20px;
-    font-size: 13px; color: #999; font-weight: 500;
-}
-.msg-item {
-    display: flex; gap: 12px; padding: 8px 0;
-    border-bottom: 1px solid #f5f5f5; font-size: 14px;
-}
-.msg-time {
-    flex-shrink: 0; width: 70px; color: #999;
-    font-family: "Courier New", monospace; font-size: 13px; padding-top: 2px;
-}
-.msg-sender {
-    flex-shrink: 0; width: 120px; font-weight: 600; color: #333;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.msg-sender.self { color: #0f3460; }
-.msg-text { flex: 1; color: #444; word-break: break-all; }
-.msg-type-icon {
-    flex-shrink: 0; width: 24px; text-align: center; font-size: 14px; padding-top: 2px;
-}
-.msg-type-icon.text::before { content: "\1F4AC"; }
-.msg-type-icon.image::before { content: "\1F5BC"; }
-.msg-type-icon.voice::before { content: "\1F3A4"; }
-.msg-type-icon.video::before { content: "\1F3AC"; }
-.msg-type-icon.card::before { content: "\1F4C7"; }
-.msg-type-icon.emoji::before { content: "\1F60A"; }
-.msg-type-icon.location::before { content: "\1F4CD"; }
-.msg-type-icon.share::before { content: "\1F517"; }
-.msg-type-icon.voip::before { content: "\1F4DE"; }
-.msg-type-icon.system::before { content: "\2699"; }
-.msg-type-icon.other::before { content: "\1F4CE"; }
-
-/* === Data Summary Table === */
-.summary-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;
-}
-.summary-card {
-    background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 6px;
-    padding: 16px; text-align: center;
-}
-.summary-card .label { font-size: 12px; color: #999; margin-bottom: 4px; }
-.summary-card .value { font-size: 20px; font-weight: 700; color: #1a1a2e; }
-.type-stats-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-.type-stats-table th, .type-stats-table td {
-    padding: 8px 12px; border: 1px solid #e8e8e8; font-size: 13px; text-align: left;
-}
-.type-stats-table th { background: #f8f9fa; font-weight: 600; color: #555; }
-
-/* === Legal Disclaimer === */
-.legal-disclaimer {
-    margin-top: 16px; padding: 16px 20px;
-    background: #fff8f0; border: 1px solid #f0d8b5; border-radius: 6px;
-    font-size: 13px; color: #8a6d3b; line-height: 1.8;
-}
-
-/* === Integrity Section === */
-.checksum-box {
-    background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 6px;
-    padding: 20px; font-family: "Courier New", monospace; font-size: 13px;
-    line-height: 2; word-break: break-all;
-}
-.checksum-label { color: #999; font-size: 12px; display: block; margin-bottom: 2px; font-family: "Microsoft YaHei", sans-serif; }
-.checksum-value { color: #1a1a2e; font-weight: 600; }
-
-/* === Signature Section === */
-.signature-area { margin-top: 60px; }
-.sig-row {
-    display: flex; align-items: flex-end; gap: 16px;
-    margin-bottom: 40px;
-}
-.sig-label { font-size: 14px; color: #555; font-weight: 600; white-space: nowrap; }
-.sig-line {
-    flex: 1; border-bottom: 1px solid #333;
-    min-width: 200px; height: 30px;
-}
-
-/* === Footer === */
-.report-footer {
-    text-align: center; padding: 30px 0; font-size: 12px; color: #bbb;
-}
-
-/* === Print Styles === */
-@media print {
-    body { background: #fff; }
-    .page { margin: 0; max-width: 100%; }
-    .report-header { border-radius: 0; }
-    .report-body { box-shadow: none; border-radius: 0; padding: 30px 40px; }
-    .watermark { position: fixed; }
-    .watermark-inner span { color: rgba(180,40,40,0.08); }
-    .msg-item { break-inside: avoid; }
-    .section { break-inside: avoid; }
-    .signature-area { break-before: page; }
-}
-</style>
-</head>
-<body>
-
-<!-- Watermark Overlay with dynamic report ID and export time -->
-<div class="watermark"><div class="watermark-inner">
-{{range .WatermarkItems}}<span>{{$.ReportID}} | {{$.ExportTime}} | 取证证据 FORENSIC</span>
-{{end}}
-</div></div>
-
-<div class="page">
-
-<!-- Report Header -->
-<div class="report-header">
-    <h1>{{.Title}}</h1>
-    <div class="subtitle">WeTrace Digital Forensic Evidence Report</div>
-    <div class="report-id">{{.ReportID}}</div>
-</div>
-
-<div class="report-body">
-
-<!-- Section 1: Metadata -->
-<div class="section">
-    <div class="section-title">一、报告信息</div>
-    <table class="meta-table">
-        <tr><td>报告编号</td><td>{{.ReportID}}</td></tr>
-        <tr><td>生成时间</td><td>{{.ExportTime}}</td></tr>
-        <tr><td>聊天对象</td><td>{{.TalkerName}} ({{.Talker}})</td></tr>
-        <tr><td>数据时间范围</td><td>{{.StartTime}} ~ {{.EndTime}}</td></tr>
-        <tr><td>消息总数</td><td>{{.MessageCount}} 条</td></tr>
-        <tr><td>软件版本</td><td>WeTrace v1.0.0</td></tr>
-    </table>
-</div>
-
-<!-- Section 2: Data Summary -->
-<div class="section">
-    <div class="section-title">二、数据摘要</div>
-    <div class="summary-grid">
-        <div class="summary-card">
-            <div class="label">消息总数</div>
-            <div class="value">{{.MessageCount}}</div>
+	// 2. 构造取证摘要 HTML
+	summaryHTML := `
+        <div class="forensic-summary">
+            <h2><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> 电子数据取证摘要 (Forensic Summary)</h2>
+            <div class="grid">
+                <div class="item"><span class="label">报告编号:</span>` + reportID + `</div>
+                <div class="item"><span class="label">导出时间:</span>` + exportTime.Format("2006-01-02 15:04:05") + `</div>
+                <div class="item"><span class="label">聊天对象:</span>` + talkerName + ` (` + talker + `)</div>
+                <div class="item"><span class="label">消息总数:</span>` + fmt.Sprintf("%d", count) + ` 条</div>
+                <div class="item"><span class="label">起始时间:</span>` + startTime.Format("2006-01-02 15:04:05") + `</div>
+                <div class="item"><span class="label">截止时间:</span>` + endTime.Format("2006-01-02 15:04:05") + `</div>
+                <div class="hash">
+                    <div style="margin-bottom:4px; font-weight:bold; color:#555;">数据校验指纹 (SHA-256 Fingerprint):</div>
+                    ` + dataHash + `
+                </div>
+            </div>
         </div>
-        <div class="summary-card">
-            <div class="label">参与者数量</div>
-            <div class="value">{{len .Participants}}</div>
+    `
+	// 注入到渲染列表之前
+	html = strings.Replace(html, `<div id="msg-list" class="msg-list"></div>`, summaryHTML+`<div id="msg-list" class="msg-list"></div>`, 1)
+
+	// 3. 注入脚注
+	footerHTML := `
+        <div class="forensic-footer">
+            <p>WeTrace 取证报告 | 声明：本数据由 WeTrace 取证工具自动采集，数据完整性由上述 SHA-256 指纹校验。任何篡改均会导致指纹失效。</p>
+            <p style="margin-top:8px;">导出人员签名：____________________  日期：____________________</p>
         </div>
-        <div class="summary-card">
-            <div class="label">最早消息时间</div>
-            <div class="value" style="font-size:14px;">{{.FirstMsgTime}}</div>
-        </div>
-        <div class="summary-card">
-            <div class="label">最晚消息时间</div>
-            <div class="value" style="font-size:14px;">{{.LastMsgTime}}</div>
-        </div>
-    </div>
-    <table class="meta-table" style="margin-bottom:16px;">
-        <tr><td>参与者列表</td><td>{{range $i, $p := .Participants}}{{if $i}}、{{end}}{{$p}}{{end}}</td></tr>
-    </table>
-    {{if .TypeStats}}
-    <table class="type-stats-table">
-        <tr><th>消息类型</th><th>数量</th></tr>
-        {{range .TypeStats}}
-        <tr><td>{{.TypeName}}</td><td>{{.Count}}</td></tr>
-        {{end}}
-    </table>
-    {{end}}
-</div>
+    `
+	html = strings.Replace(html, `</div><!-- #app -->`, footerHTML+`</div><!-- #app -->`, 1)
 
-<!-- Section 3: Chat Records -->
-<div class="section">
-    <div class="section-title">三、聊天记录</div>
-    {{range .DateGroups}}
-    <div class="date-group">
-        <div class="date-header"><span>{{.Date}}</span></div>
-        {{range .Messages}}
-        <div class="msg-item">
-            <div class="msg-type-icon {{.TypeIcon}}"></div>
-            <div class="msg-time">{{.Time}}</div>
-            <div class="msg-sender{{if .IsSelf}} self{{end}}">{{.Sender}}</div>
-            <div class="msg-text">{{.Content}}</div>
-        </div>
-        {{end}}
-    </div>
-    {{end}}
-</div>
-
-<!-- Section 4: Integrity Verification -->
-<div class="section">
-    <div class="section-title">四、完整性验证</div>
-    <p style="font-size:14px; color:#666; margin-bottom:16px;">
-        本导出包中的所有文件均附带 SHA-256 哈希校验值，可通过 <code>checksums.sha256</code> 文件验证数据完整性。
-    </p>
-    <div class="checksum-box">
-        <span class="checksum-label">report.html</span>
-        <span class="checksum-value">请参阅 checksums.sha256 文件</span><br>
-        <span class="checksum-label">chat_data.csv</span>
-        <span class="checksum-value">请参阅 checksums.sha256 文件</span>
-    </div>
-    <p style="font-size:13px; color:#999; margin-top:12px;">
-        验证方法：在命令行中执行 <code>sha256sum -c checksums.sha256</code>，或使用其他 SHA-256 校验工具逐一比对哈希值。
-        如哈希值与校验文件中记录的值一致，则表明数据自导出后未被篡改。
-    </p>
-</div>
-
-<!-- Section 5: Signature -->
-<div class="section signature-area">
-    <div class="section-title">五、签名确认</div>
-    <div class="sig-row">
-        <span class="sig-label">导出操作人签名：</span>
-        <div class="sig-line"></div>
-    </div>
-    <div class="sig-row">
-        <span class="sig-label">日期：</span>
-        <div class="sig-line"></div>
-    </div>
-    <div class="sig-row">
-        <span class="sig-label">备注：</span>
-        <div class="sig-line"></div>
-    </div>
-</div>
-
-</div><!-- .report-body -->
-
-<div class="report-footer">
-    <div class="legal-disclaimer">
-        声明：本报告仅供司法取证使用，未经授权不得篡改。报告内容由 WeTrace 软件自动采集并生成，
-        报告中的数据完整性可通过附带的 SHA-256 校验文件进行独立验证。任何对本报告内容的修改均可能导致校验失败，
-        从而影响其作为电子证据的法律效力。
-    </div>
-    <p style="margin-top:16px;">本报告由 WeTrace 软件自动生成 | 报告编号: {{.ReportID}} | 生成时间: {{.ExportTime}}</p>
-</div>
-
-</div><!-- .page -->
-</body>
-</html>`
+	return html, nil
+}
