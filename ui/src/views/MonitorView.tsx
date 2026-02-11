@@ -735,6 +735,18 @@ export default function MonitorView() {
           </p>
         </div>
 
+        {/* 待实现提示 */}
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400">功能持续完善中</h4>
+            <p className="text-xs text-amber-700/80 dark:text-amber-500/70 mt-1 leading-relaxed">
+              当前的监控模块处于早期版本，主要用于核心规则的配置和飞书推送。
+              更多高级功能（如：更精准的 AI 研判、监控历史回溯、图形化分析看板等）将在未来的版本中陆续上线，敬请期待。
+            </p>
+          </div>
+        </div>
+
         {/* Config form (editing / creating) */}
         {editing && (
           <ConfigFormDialog

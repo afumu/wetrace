@@ -1,4 +1,4 @@
-import { request, getApiBaseUrl } from "@/lib/request"
+import { request } from "@/lib/request"
 import type { MessageResponse, Message } from "@/types"
 
 export interface ReplayData {
@@ -32,23 +32,6 @@ function transformReplayMessage(response: MessageResponse): Message {
   }
 }
 
-export interface ReplayExportRequest {
-  talker_id: string
-  start_date?: string
-  end_date?: string
-  format?: "mp4" | "gif"
-  speed?: number
-  resolution?: "720p" | "1080p"
-}
-
-export interface ReplayExportStatus {
-  task_id: string
-  status: "pending" | "processing" | "completed" | "failed"
-  progress: number
-  total_frames: number
-  processed_frames: number
-}
-
 export const replayApi = {
   getMessages: async (params: {
     talker_id: string
@@ -62,21 +45,5 @@ export const replayApi = {
       total: data.total,
       messages: (data.messages || []).map(transformReplayMessage),
     }
-  },
-
-  createExport: (data: ReplayExportRequest) =>
-    request.post<{ task_id: string; status: string; message: string }>(
-      "/api/v1/export/replay",
-      data
-    ),
-
-  getExportStatus: (taskId: string) =>
-    request.get<ReplayExportStatus>(
-      "/api/v1/export/replay/status/" + taskId
-    ),
-
-  getExportDownloadUrl: (taskId: string): string => {
-    const baseURL = getApiBaseUrl()
-    return `${baseURL}/api/v1/export/replay/download/${taskId}`
   },
 }

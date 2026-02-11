@@ -131,6 +131,7 @@ func (r *Repository) overviewV4(ctx context.Context, db *sql.DB, start, end time
 	contactSet, chatroomSet, daySet map[string]bool,
 	firstDate, lastDate *string) {
 
+	myWxid := r.getCurrentUserWxid(ctx)
 	talkerMD5Map := r.getTalkerMD5Map(ctx)
 
 	tables, err := db.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'Msg_%%'")
@@ -159,13 +160,34 @@ func (r *Repository) overviewV4(ctx context.Context, db *sql.DB, start, end time
 			}
 		}
 
-		// 统计消息数: real_sender_id = 0 表示自己发送的消息
-		query := fmt.Sprintf(`SELECT COUNT(*),
-			SUM(CASE WHEN m.real_sender_id = 0 THEN 1 ELSE 0 END),
-			SUM(CASE WHEN m.real_sender_id != 0 THEN 1 ELSE 0 END)
-			FROM %s m WHERE m.create_time >= ? AND m.create_time <= ?`, tableName)
+		// 统计消息数: 增强版判定
 		var total, sent, recv sql.NullInt64
-		if err := db.QueryRowContext(ctx, query, start.Unix(), end.Unix()).Scan(&total, &sent, &recv); err == nil {
+		var query string
+		if talker != "unknown" && !strings.HasSuffix(talker, "@chatroom") {
+			// 私聊：利用排除对方的逻辑，最准确
+			query = fmt.Sprintf(`
+				SELECT 
+					COUNT(*),
+					SUM(CASE WHEN (m.status = 2 OR m.real_sender_id = 0 OR n.user_name != ?) THEN 1 ELSE 0 END),
+					SUM(CASE WHEN (m.status != 2 AND m.real_sender_id != 0 AND n.user_name = ?) THEN 1 ELSE 0 END)
+				FROM %s m 
+				LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid 
+				WHERE m.create_time >= ? AND m.create_time <= ? AND m.local_type != 10000`, tableName)
+			err = db.QueryRowContext(ctx, query, talker, talker, start.Unix(), end.Unix()).Scan(&total, &sent, &recv)
+		} else {
+			// 群聊或未知：只能靠 myWxid 匹配
+			query = fmt.Sprintf(`
+				SELECT 
+					COUNT(*),
+					SUM(CASE WHEN (n.user_name = ? OR m.status = 2 OR m.real_sender_id = 0) THEN 1 ELSE 0 END),
+					SUM(CASE WHEN (n.user_name != ? AND m.status != 2 AND m.real_sender_id != 0) THEN 1 ELSE 0 END)
+				FROM %s m 
+				LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid 
+				WHERE m.create_time >= ? AND m.create_time <= ? AND m.local_type != 10000`, tableName)
+			err = db.QueryRowContext(ctx, query, myWxid, myWxid, start.Unix(), end.Unix()).Scan(&total, &sent, &recv)
+		}
+
+		if err == nil {
 			if total.Valid && total.Int64 > 0 {
 				*totalMsgs += int(total.Int64)
 				if sent.Valid {
@@ -232,11 +254,17 @@ func (r *Repository) getAnnualTopContacts(ctx context.Context, start, end time.T
 			tableName := "Msg_" + hex.EncodeToString(hash[:])
 
 			if r.isTableExist(db, tableName) {
-				// real_sender_id = 0 表示自己发送的消息
-				query := fmt.Sprintf(
-					"SELECT CASE WHEN real_sender_id = 0 THEN 1 ELSE 0 END as is_self, COUNT(*), MAX(create_time) FROM %s WHERE create_time >= ? AND create_time <= ? GROUP BY is_self",
-					tableName)
-				rows, err := db.QueryContext(ctx, query, start.Unix(), end.Unix())
+				// 增强版判定：私聊中排除对方即是我
+				query := fmt.Sprintf(`
+					SELECT 
+						CASE WHEN (m.status = 2 OR m.real_sender_id = 0 OR n.user_name != ?) THEN 1 ELSE 0 END as is_self, 
+						COUNT(*), 
+						MAX(m.create_time) 
+					FROM %s m
+					LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid
+					WHERE m.create_time >= ? AND m.create_time <= ? AND m.local_type != 10000 
+					GROUP BY is_self`, tableName)
+				rows, err := db.QueryContext(ctx, query, talker, start.Unix(), end.Unix())
 				if err == nil {
 					for rows.Next() {
 						var isSelf, count int

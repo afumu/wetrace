@@ -4,13 +4,11 @@ import { replayApi } from "@/api/replay"
 import { sessionApi } from "@/api/session"
 import type { Session, Message } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
   Play,
   Pause,
-  Download,
   Search,
   MessageSquare,
   Loader2,
@@ -106,7 +104,6 @@ function ReplayControls({
   onPause,
   onSpeedChange,
   onSeek,
-  onExport,
 }: {
   playing: boolean
   speed: number
@@ -117,7 +114,6 @@ function ReplayControls({
   onPause: () => void
   onSpeedChange: (s: number) => void
   onSeek: (idx: number) => void
-  onExport: () => void
 }) {
   return (
     <div className="border-t bg-background px-4 py-3 flex items-center gap-3">
@@ -169,215 +165,6 @@ function ReplayControls({
       <span className="text-xs text-muted-foreground whitespace-nowrap">
         {visibleCount} / {total}
       </span>
-
-      {/* Export */}
-      <Button size="sm" variant="outline" onClick={onExport}>
-        <Download className="w-4 h-4 mr-1" />
-        导出
-      </Button>
-    </div>
-  )
-}
-
-/* ============================================================
- * Export Dialog
- * ============================================================ */
-function ExportDialog({
-  talkerId,
-  onClose,
-}: {
-  talkerId: string
-  onClose: () => void
-}) {
-  const [format, setFormat] = useState<"mp4" | "gif">("mp4")
-  const [exportSpeed, setExportSpeed] = useState(4)
-  const [resolution, setResolution] = useState<"720p" | "1080p">("720p")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [status, setStatus] = useState<string>("idle")
-  const [progress, setProgress] = useState(0)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const handleStart = async () => {
-    try {
-      setStatus("submitting")
-      const res = await replayApi.createExport({
-        talker_id: talkerId,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        format,
-        speed: exportSpeed,
-        resolution,
-      })
-      setTaskId(res.task_id)
-      setStatus("processing")
-    } catch {
-      setStatus("error")
-    }
-  }
-
-  // Poll export status
-  useEffect(() => {
-    if (status !== "processing" || !taskId) return
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await replayApi.getExportStatus(taskId)
-        setProgress(res.progress)
-        if (res.status === "completed") {
-          setStatus("completed")
-          if (pollRef.current) clearInterval(pollRef.current)
-        } else if (res.status === "failed") {
-          setStatus("error")
-          if (pollRef.current) clearInterval(pollRef.current)
-        }
-      } catch {
-        setStatus("error")
-        if (pollRef.current) clearInterval(pollRef.current)
-      }
-    }, 2000)
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [status, taskId])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <Card className="w-[420px] max-w-[90vw]">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Download className="w-4 h-4 text-primary" />
-            回放导出
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Date range */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium leading-none">起始日期</label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-9"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium leading-none">结束日期</label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-9"
-              />
-            </div>
-          </div>
-
-          {/* Format */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium leading-none">导出格式</label>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={format === "mp4" ? "default" : "outline"}
-                onClick={() => setFormat("mp4")}
-              >
-                MP4 视频
-              </Button>
-              <Button
-                size="sm"
-                variant={format === "gif" ? "default" : "outline"}
-                onClick={() => setFormat("gif")}
-              >
-                GIF 动图
-              </Button>
-            </div>
-          </div>
-
-          {/* Speed */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium leading-none">播放速度</label>
-            <div className="flex gap-2">
-              {SPEED_OPTIONS.map((s) => (
-                <Button
-                  key={s}
-                  size="sm"
-                  variant={exportSpeed === s ? "default" : "outline"}
-                  onClick={() => setExportSpeed(s)}
-                >
-                  {s}x
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Resolution */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium leading-none">分辨率</label>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={resolution === "720p" ? "default" : "outline"}
-                onClick={() => setResolution("720p")}
-              >
-                720p
-              </Button>
-              <Button
-                size="sm"
-                variant={resolution === "1080p" ? "default" : "outline"}
-                onClick={() => setResolution("1080p")}
-              >
-                1080p
-              </Button>
-            </div>
-          </div>
-
-          {/* Progress */}
-          {status === "processing" && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                导出中... {progress}%
-              </div>
-              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {status === "completed" && taskId && (
-            <div className="text-sm text-green-600 dark:text-green-400">
-              导出完成！
-              <a
-                href={replayApi.getExportDownloadUrl(taskId)}
-                className="ml-2 underline"
-                download
-              >
-                点击下载
-              </a>
-            </div>
-          )}
-
-          {status === "error" && (
-            <p className="text-sm text-destructive">导出失败，请重试</p>
-          )}
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 pt-2">
-            {status === "idle" && (
-              <Button size="sm" onClick={handleStart}>
-                开始导出
-              </Button>
-            )}
-            <Button size="sm" variant="outline" onClick={onClose}>
-              {status === "completed" ? "关闭" : "取消"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
@@ -464,7 +251,6 @@ export default function ReplayView() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
   const [sessionSearch, setSessionSearch] = useState("")
   const [startDate, setStartDate] = useState("")
-  const [showExport, setShowExport] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Fetch sessions
@@ -587,16 +373,7 @@ export default function ReplayView() {
         onPause={replay.pause}
         onSpeedChange={replay.setSpeed}
         onSeek={replay.jumpTo}
-        onExport={() => setShowExport(true)}
       />
-
-      {/* Export dialog */}
-      {showExport && selectedSession && (
-        <ExportDialog
-          talkerId={selectedSession.talker}
-          onClose={() => setShowExport(false)}
-        />
-      )}
     </div>
   )
 }

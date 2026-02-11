@@ -13,9 +13,8 @@ import (
 	"github.com/afumu/wetrace/internal/ai"
 	"github.com/afumu/wetrace/internal/backup"
 	"github.com/afumu/wetrace/internal/monitor"
-	"github.com/afumu/wetrace/internal/replay"
-	"github.com/afumu/wetrace/internal/tts"
 	intsync "github.com/afumu/wetrace/internal/sync"
+	"github.com/afumu/wetrace/internal/tts"
 	"github.com/afumu/wetrace/store"
 	"github.com/afumu/wetrace/store/types"
 	"github.com/afumu/wetrace/web/export"
@@ -33,7 +32,6 @@ type API struct {
 	Password        *PasswordManager
 	SyncScheduler   *intsync.Scheduler
 	BackupScheduler *backup.Scheduler
-	ReplayExporter  *replay.Exporter
 	Monitor         *monitor.Store
 	MonitorChecker  *monitor.Checker
 	TTS             *tts.Client
@@ -122,9 +120,6 @@ func NewAPI(s store.Store, m *media.Service, conf *Config, staticFS fs.FS) *API 
 		}
 		a.BackupScheduler.Configure(true, hours, bPath, bFormat)
 	}
-
-	// Initialize replay exporter
-	a.ReplayExporter = replay.NewExporter(s)
 
 	// Initialize monitor store
 	monitorDir := filepath.Join(viper.GetString("config_path"), "monitor")

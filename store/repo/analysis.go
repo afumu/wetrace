@@ -18,6 +18,49 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+func (r *Repository) getCurrentUserWxid(ctx context.Context) string {
+	// 遍历所有分片尝试寻找一个“我发送”的证据
+	for _, shard := range r.router.GetShards() {
+		db, err := r.pool.GetConnection(shard.FilePath)
+		if err != nil {
+			continue
+		}
+
+		// 寻找任何一个 Msg_ 表
+		var tableName string
+		_ = db.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'Msg_%%' LIMIT 1").Scan(&tableName)
+		if tableName == "" {
+			continue
+		}
+
+		// 寻找 status=2 (已发送) 且 real_sender_id > 0 的记录来获取我的 wxid
+		var myWxid string
+		query := fmt.Sprintf(`
+			SELECT n.user_name 
+			FROM %s m 
+			JOIN Name2Id n ON m.real_sender_id = n.rowid 
+			WHERE m.status = 2 AND n.user_name IS NOT NULL AND n.user_name != '' 
+			LIMIT 1`, tableName)
+		if err := db.QueryRowContext(ctx, query).Scan(&myWxid); err == nil && myWxid != "" {
+			return myWxid
+		}
+	}
+
+	// 备选：从 contact 表找 local_type = 1 (通常是个人账号)
+	dbPath, err := r.router.GetContactDBPath()
+	if err == nil {
+		if db, err := r.pool.GetConnection(dbPath); err == nil {
+			var wxid string
+			_ = db.QueryRowContext(ctx, "SELECT username FROM contact WHERE local_type = 1 LIMIT 1").Scan(&wxid)
+			if wxid != "" {
+				return wxid
+			}
+		}
+	}
+
+	return ""
+}
+
 // GetHourlyActivity 获取指定会话的每小时消息活跃度
 func (r *Repository) GetHourlyActivity(ctx context.Context, talker string) ([]*model.HourlyStat, error) {
 	targets := r.router.Resolve(time.Unix(0, 0), time.Now(), talker)
@@ -326,7 +369,7 @@ func (r *Repository) GetMemberActivity(ctx context.Context, talker string) ([]*m
 			query := fmt.Sprintf(`
 				SELECT
 					CASE
-						WHEN m.real_sender_id = 0 THEN ?
+						WHEN m.status = 2 THEN 'self'
 						WHEN n.user_name IS NOT NULL THEN n.user_name
 						ELSE 'self'
 					END as sender,
@@ -520,8 +563,37 @@ func (r *Repository) GetPersonalTopContacts(ctx context.Context, limit int) ([]*
 			var query string
 			var args []interface{}
 			if r.isTableExist(db, tableName) {
-				// V4: 使用 status = 2 代表发送 (is_self)
-				query = fmt.Sprintf("SELECT CASE WHEN status = 2 THEN 1 ELSE 0 END as is_self, COUNT(*), MAX(create_time) FROM %s WHERE local_type != 10000 GROUP BY is_self", tableName)
+				// V4: 在私聊中，发送人不是对方 (talker) 就一定是我
+				// 判定条件：status=2 OR real_sender_id=0 OR n.user_name != talker
+				query = fmt.Sprintf(`
+					SELECT 
+						CASE WHEN (m.status = 2 OR m.real_sender_id = 0 OR n.user_name != ?) THEN 1 ELSE 0 END as is_self, 
+						COUNT(*), 
+						MAX(m.create_time) 
+					FROM %s m
+					LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid
+					WHERE m.local_type != 10000 
+					GROUP BY is_self`, tableName)
+
+				rows, err := db.QueryContext(ctx, query, talker)
+				if err == nil && rows != nil {
+					for rows.Next() {
+						var isSelf, count int
+						var maxTime int64
+						if err := rows.Scan(&isSelf, &count, &maxTime); err == nil {
+							if isSelf == 1 {
+								s.sent += count
+							} else {
+								s.recv += count
+							}
+							if maxTime > s.lastTime {
+								s.lastTime = maxTime
+							}
+						}
+					}
+					rows.Close()
+				}
+				continue
 			} else {
 				// V3: 使用 IsSender 代表发送
 				query = "SELECT IsSender, COUNT(*), MAX(CreateTime/1000) FROM MSG WHERE Type != 10000"
@@ -603,6 +675,8 @@ func (r *Repository) GetPersonalTopContacts(ctx context.Context, limit int) ([]*
 
 // GetDashboardData 获取总览数据
 func (r *Repository) GetDashboardData(ctx context.Context) (*model.DashboardData, error) {
+	myWxid := r.getCurrentUserWxid(ctx)
+
 	// 1. 获取基础统计：数据库大小和目录大小
 	dbSize, _ := r.getDBSize()
 	dirSize, _ := r.getDirSize()
@@ -660,10 +734,18 @@ func (r *Repository) GetDashboardData(ctx context.Context) (*model.DashboardData
 							latest = maxT.Int64
 						}
 
-						// V4 中没有简单的 is_self 字段，这里做一个估算或者通过 status 判断
-						// 假设 status=2 是发送
+						// V4 增强版判定
 						var sCount int
-						_ = db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE status = 2", tableName)).Scan(&sCount)
+						if myWxid != "" {
+							// 如果识别到了我的 wxid，那么 (是我的 ID OR status=2 OR sender_id=0) 都算我的
+							q := fmt.Sprintf(`
+								SELECT COUNT(*) FROM %s m 
+								LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid 
+								WHERE (n.user_name = ? OR m.status = 2 OR m.real_sender_id = 0) AND m.local_type != 10000`, tableName)
+							_ = db.QueryRowContext(ctx, q, myWxid).Scan(&sCount)
+						} else {
+							_ = db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE (status = 2 OR real_sender_id = 0)", tableName)).Scan(&sCount)
+						}
 						sentMsgs += sCount
 						recvMsgs += (count - sCount)
 					}

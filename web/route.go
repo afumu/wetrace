@@ -142,14 +142,6 @@ func (s *Service) setupRoutes() {
 		// 回放路由 (需求16)
 		v1.GET("/messages/replay", s.api.GetReplayMessages)
 
-		// 回放导出路由 (需求17)
-		replayExport := v1.Group("/export/replay")
-		{
-			replayExport.POST("", s.api.CreateReplayExport)
-			replayExport.GET("/status/:task_id", s.api.GetReplayExportStatus)
-			replayExport.GET("/download/:task_id", s.api.DownloadReplayExport)
-		}
-
 		// 监控配置路由 (需求14+15)
 		monitorGroup := v1.Group("/monitor")
 		{
