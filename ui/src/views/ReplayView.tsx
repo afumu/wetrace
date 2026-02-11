@@ -15,6 +15,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MessageBubble } from "@/components/chat/MessageBubble"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { mediaApi } from "@/api/media"
 
 const SPEED_OPTIONS = [1, 2, 4, 8] as const
 const MAX_INTERVAL_MS = 2000 // cap real interval at 2s
@@ -226,9 +228,10 @@ function SessionSelector({
                 onClick={() => onSelect(s)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
               >
-                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm text-muted-foreground flex-shrink-0">
-                  {(s.name || s.talker).charAt(0)}
-                </div>
+                <Avatar className="w-9 h-9 rounded-full shrink-0">
+                  <AvatarImage src={s.smallHeadURL || (s.avatar && (s.avatar.startsWith('http') ? s.avatar : mediaApi.getAvatarUrl(`avatar/${s.talker}`)))} />
+                  <AvatarFallback>{(s.name || s.talker).charAt(0)}</AvatarFallback>
+                </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{s.name || s.talker}</p>
                   <p className="text-xs text-muted-foreground truncate">

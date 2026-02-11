@@ -1,5 +1,6 @@
 import type { MemberActivity } from "@/api";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { mediaApi } from "@/api/media";
 
 interface Props {
   data: MemberActivity[];
@@ -16,7 +17,7 @@ export function MemberRank({ data }: Props) {
             {index + 1}
           </div>
           <Avatar className="h-8 w-8">
-            <AvatarImage src={member.avatar} />
+            <AvatarImage src={member.avatar && (member.avatar.startsWith('http') ? member.avatar : mediaApi.getAvatarUrl(`avatar/${member.platformId}`))} />
             <AvatarFallback>{member.name.slice(0, 1)}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">

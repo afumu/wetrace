@@ -49,6 +49,8 @@ export interface NeedContactItem {
   userName: string
   nickName: string
   remark: string
+  smallHeadURL: string
+  bigHeadURL: string
   lastContactTime: number
   daysSinceContact: number
 }

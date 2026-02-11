@@ -102,14 +102,14 @@ type DashboardTimeline struct {
 
 // AnnualReport 年度报告
 type AnnualReport struct {
-	Year         int                    `json:"year"`
-	Overview     AnnualOverview         `json:"overview"`
-	TopContacts  []*PersonalTopContact  `json:"top_contacts"`
-	MonthlyTrend []*MonthlyStat         `json:"monthly_trend"`
-	WeekdayDist  []*WeekdayStat         `json:"weekday_distribution"`
-	HourlyDist   []*HourlyStat          `json:"hourly_distribution"`
-	MessageTypes map[string]int         `json:"message_types"`
-	Highlights   AnnualHighlights       `json:"highlights"`
+	Year         int                   `json:"year"`
+	Overview     AnnualOverview        `json:"overview"`
+	TopContacts  []*PersonalTopContact `json:"top_contacts"`
+	MonthlyTrend []*MonthlyStat        `json:"monthly_trend"`
+	WeekdayDist  []*WeekdayStat        `json:"weekday_distribution"`
+	HourlyDist   []*HourlyStat         `json:"hourly_distribution"`
+	MessageTypes map[string]int        `json:"message_types"`
+	Highlights   AnnualHighlights      `json:"highlights"`
 }
 
 // AnnualOverview 年度概览
@@ -147,6 +147,8 @@ type NeedContactItem struct {
 	UserName         string `json:"userName"`
 	NickName         string `json:"nickName"`
 	Remark           string `json:"remark"`
+	SmallHeadURL     string `json:"smallHeadURL"`
+	BigHeadURL       string `json:"bigHeadURL"`
 	LastContactTime  int64  `json:"lastContactTime"`
 	DaysSinceContact int    `json:"daysSinceContact"`
 }

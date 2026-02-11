@@ -171,7 +171,7 @@ function getDaysColor(days: number): string {
 function ContactCard({ item }: { item: NeedContactItem }) {
   const displayName = item.remark || item.nickName || item.userName
   const firstChar = displayName.charAt(0) || "?"
-  const avatarUrl = mediaApi.getAvatarUrl(`avatar/${item.userName}`)
+  const avatarUrl = item.smallHeadURL || mediaApi.getAvatarUrl(`avatar/${item.userName}`)
 
   return (
     <Card className="overflow-hidden border-none shadow-sm bg-card hover:shadow-md hover:ring-1 hover:ring-primary/20 transition-all">

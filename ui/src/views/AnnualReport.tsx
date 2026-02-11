@@ -261,7 +261,7 @@ function TopContactsSection({ contacts }: { contacts: AnnualReport["top_contacts
                 {idx + 1}
               </div>
               <Avatar className="h-10 w-10 border shadow-sm">
-                <AvatarImage src={contact.avatar ? mediaApi.getImageUrl(contact.avatar) : undefined} />
+                <AvatarImage src={contact.avatar && (contact.avatar.startsWith('http') ? contact.avatar : mediaApi.getAvatarUrl(`avatar/${contact.talker}`))} />
                 <AvatarFallback>{contact.name?.substring(0, 1) || "?"}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">

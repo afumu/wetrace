@@ -71,6 +71,8 @@ func (r *Repository) GetNeedContactList(ctx context.Context, days int) ([]*model
 		if p, ok := profiles[talker]; ok {
 			item.NickName = p.NickName
 			item.Remark = p.Remark
+			item.SmallHeadURL = p.SmallHeadURL
+			item.BigHeadURL = p.BigHeadURL
 		}
 
 		result = append(result, item)
