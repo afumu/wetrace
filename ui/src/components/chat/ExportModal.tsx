@@ -1,12 +1,12 @@
 import { useState } from "react"
 import { createPortal } from "react-dom"
-import { X, Calendar, FileJson, FileText, Globe, FileSpreadsheet, FileType, FileCheck, Shield } from "lucide-react"
+import { X, Calendar, FileJson, FileText, Globe, FileSpreadsheet, FileType, Shield } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "@/lib/utils"
 import { Label } from "../ui/label"
 import { Input } from "../ui/input"
 
-type ExportFormat = 'html' | 'json' | 'txt' | 'csv' | 'xlsx' | 'docx' | 'pdf' | 'forensic'
+type ExportFormat = 'html' | 'json' | 'txt' | 'csv' | 'xlsx' | 'docx' | 'forensic'
 
 interface ExportModalProps {
   isOpen: boolean
@@ -33,13 +33,12 @@ export function ExportModal({ isOpen, onClose, onExport }: ExportModalProps) {
 
   const exportOptions = [
     { id: 'html' as const, label: '网页导出', icon: Globe, desc: '包含图片、视频的可视化网页' },
-    { id: 'pdf' as const, label: 'PDF 文档', icon: FileCheck, desc: 'PDF格式，含发送者、时间和内容' },
     { id: 'txt' as const, label: '纯文本', icon: FileText, desc: '仅包含文字内容，易于阅读' },
     { id: 'csv' as const, label: 'CSV 表格', icon: FileSpreadsheet, desc: '逗号分隔，可用Excel打开' },
     { id: 'xlsx' as const, label: 'Excel 表格', icon: FileSpreadsheet, desc: 'Excel格式，带表头和格式' },
     { id: 'docx' as const, label: 'Word 文档', icon: FileType, desc: 'Word格式，按日期分段排版' },
     { id: 'json' as const, label: 'JSON数据', icon: FileJson, desc: '原始数据，适合开发者' },
-    { id: 'forensic' as const, label: '法律取证导出', icon: Shield, desc: '含PDF报告、CSV数据、SHA-256校验' },
+    { id: 'forensic' as const, label: '法律取证导出', icon: Shield, desc: '含HTML取证报告、数据校验、取证水印、签名区域' },
   ]
 
   return createPortal(

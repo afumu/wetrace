@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { systemApi, mediaApi } from "@/api"
 import { toast } from "sonner"
 import { aiApi } from "@/api/ai"
-import { useState, useMemo } from "react"
+import { createPortal } from "react-dom"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { useSessions } from "@/hooks/useSession"
 import { useMessages } from "@/hooks/useChatLog"
 import { AnalysisPanel } from "@/components/analysis/AnalysisPanel"
@@ -31,6 +32,19 @@ export default function Chat() {
   const [showAISimulate, setShowAISimulate] = useState(false)
   const [showSessionGallery, setShowSessionGallery] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
+
+  const openMoreMenu = useCallback(() => {
+    if (moreButtonRef.current) {
+      const rect = moreButtonRef.current.getBoundingClientRect()
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+    setShowMoreMenu(true)
+  }, [])
 
   const isGroupChat = useMemo(() => {
     return activeTalker?.endsWith('@chatroom')
@@ -189,21 +203,21 @@ export default function Chat() {
                 </Button>
 
                 {/* More dropdown */}
-                <div className="relative">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1 text-muted-foreground hover:text-primary"
-                    onClick={() => setShowMoreMenu((v) => !v)}
-                    title="更多操作"
-                  >
-                    <MoreHorizontal className="w-4 h-4" />
-                    <span className="text-xs">更多</span>
-                  </Button>
-                  {showMoreMenu && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
-                      <div className="absolute right-0 top-full mt-1 z-50 bg-card border rounded-lg shadow-lg py-1 w-44">
+                <Button
+                  ref={moreButtonRef}
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 text-muted-foreground hover:text-primary"
+                  onClick={openMoreMenu}
+                  title="更多操作"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                  <span className="text-xs">更多</span>
+                </Button>
+                {showMoreMenu && createPortal(
+                  <>
+                    <div className="fixed inset-0 z-[140]" onClick={() => setShowMoreMenu(false)} />
+                    <div className="fixed z-[150] bg-card border rounded-lg shadow-lg py-1 w-44" style={{ top: menuPos.top, right: menuPos.right }}>
                         {/* AI 功能 */}
                         <div className="px-3 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">AI 功能</div>
                         {!isGroupChat && (
@@ -267,9 +281,9 @@ export default function Chat() {
                           {isSyncing ? '正在同步...' : '同步数据'}
                         </button>
                       </div>
-                    </>
-                  )}
-                </div>
+                  </>,
+                  document.body
+                )}
               </div>
             </div>
             

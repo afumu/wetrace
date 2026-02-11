@@ -32,7 +32,7 @@ func (r *Repository) GetContacts(ctx context.Context, q types.ContactQuery) ([]*
 }
 
 func (r *Repository) queryV4Contacts(ctx context.Context, db *sql.DB, q types.ContactQuery) ([]*model.Contact, error) {
-	query := `SELECT username, local_type, alias, remark, nick_name FROM contact`
+	query := `SELECT username, local_type, alias, remark, nick_name, COALESCE(small_head_url,''), COALESCE(big_head_url,'') FROM contact`
 	var args []interface{}
 
 	if q.Keyword != "" {
@@ -58,7 +58,7 @@ func (r *Repository) queryV4Contacts(ctx context.Context, db *sql.DB, q types.Co
 	var contacts []*model.Contact
 	for rows.Next() {
 		var c model.ContactV4
-		err := rows.Scan(&c.UserName, &c.LocalType, &c.Alias, &c.Remark, &c.NickName)
+		err := rows.Scan(&c.UserName, &c.LocalType, &c.Alias, &c.Remark, &c.NickName, &c.SmallHeadURL, &c.BigHeadURL)
 		if err != nil {
 			return nil, err
 		}
@@ -68,7 +68,7 @@ func (r *Repository) queryV4Contacts(ctx context.Context, db *sql.DB, q types.Co
 }
 
 func (r *Repository) queryV3Contacts(ctx context.Context, db *sql.DB, q types.ContactQuery) ([]*model.Contact, error) {
-	query := `SELECT UserName, Alias, Remark, NickName, Reserved1 FROM Contact`
+	query := `SELECT UserName, Alias, Remark, NickName, Reserved1, COALESCE(SmallHeadImgUrl,''), COALESCE(BigHeadImgUrl,'') FROM Contact`
 	var args []interface{}
 
 	if q.Keyword != "" {
@@ -94,7 +94,7 @@ func (r *Repository) queryV3Contacts(ctx context.Context, db *sql.DB, q types.Co
 	var contacts []*model.Contact
 	for rows.Next() {
 		var c model.ContactV3
-		err := rows.Scan(&c.UserName, &c.Alias, &c.Remark, &c.NickName, &c.Reserved1)
+		err := rows.Scan(&c.UserName, &c.Alias, &c.Remark, &c.NickName, &c.Reserved1, &c.SmallHeadImgUrl, &c.BigHeadImgUrl)
 		if err != nil {
 			return nil, err
 		}

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { contactApi, mediaApi } from "@/api"
-import type { Contact } from "@/types"
+import { contactApi } from "@/api"
+import type { Contact, Session } from "@/types"
 import { ContactType } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card } from "@/components/ui/card"
@@ -13,6 +13,7 @@ import {
   Search,
   Download,
 } from "lucide-react"
+import { useSessions } from "@/hooks/useSession"
 
 type ContactFilter = "all" | "friend" | "chatroom"
 
@@ -57,6 +58,8 @@ export default function ContactsView() {
         searchKeyword ? { keyword: searchKeyword } : undefined
       ),
   })
+
+  const { data: sessions = [] } = useSessions()
 
   const filteredContacts = useMemo(() => {
     if (!contacts) return undefined
@@ -165,7 +168,7 @@ export default function ContactsView() {
       {/* Contact list */}
       <ScrollArea className="flex-1 px-6">
         <div className="max-w-5xl mx-auto w-full pb-20">
-          <ContactList contacts={filteredContacts} isLoading={isLoading} />
+          <ContactList contacts={filteredContacts} isLoading={isLoading} sessions={sessions} />
         </div>
       </ScrollArea>
     </div>
@@ -175,9 +178,11 @@ export default function ContactsView() {
 function ContactList({
   contacts,
   isLoading,
+  sessions,
 }: {
   contacts: Contact[] | undefined
   isLoading: boolean
+  sessions: Session[]
 }) {
   if (isLoading) {
     return (
@@ -202,16 +207,19 @@ function ContactList({
   return (
     <div className="grid gap-3">
       {contacts.map((c) => (
-        <ContactCard key={c.wxid} contact={c} />
+        <ContactCard key={c.wxid} contact={c} sessions={sessions} />
       ))}
     </div>
   )
 }
 
-function ContactCard({ contact }: { contact: Contact }) {
+function ContactCard({ contact, sessions }: { contact: Contact; sessions: Session[] }) {
   const displayName = contact.remark || contact.nickname || contact.wxid
   const firstChar = (contact.nickname || contact.remark || contact.wxid || "?").charAt(0)
-  const avatarUrl = mediaApi.getAvatarUrl(`avatar/${contact.wxid}`)
+  const avatarUrl = useMemo(() => {
+    const session = sessions.find(s => s.talker === contact.wxid)
+    return session?.avatar || ""
+  }, [contact.wxid, sessions])
   const typeConfig =
     contact.type === "chatroom"
       ? { label: "群聊", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" }

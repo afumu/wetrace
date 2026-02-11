@@ -8,6 +8,8 @@ interface BackendContact {
   remark: string
   nickName: string
   isFriend: boolean
+  smallHeadImgUrl?: string
+  bigHeadImgUrl?: string
 }
 
 function getAvatarUrl(username?: string): string {
@@ -37,8 +39,8 @@ function transformContact(backendContact: BackendContact): Contact {
     isStarred: false,
     isPinned: false,
     isMinimized: false,
-    bigHeadImgUrl: '',
-    smallHeadImgUrl: '',
+    bigHeadImgUrl: backendContact.bigHeadImgUrl || '',
+    smallHeadImgUrl: backendContact.smallHeadImgUrl || '',
     headImgMd5: '',
   }
 }

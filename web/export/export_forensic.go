@@ -134,6 +134,13 @@ type forensicMsg struct {
 	Sender  string
 	Content string
 	IsSelf  bool
+	TypeIcon string // message type icon (emoji/text indicator)
+}
+
+// forensicMsgTypeStat holds message type statistics for the summary table.
+type forensicMsgTypeStat struct {
+	TypeName string
+	Count    int
 }
 
 // forensicTemplateData holds all data passed to the HTML template.
@@ -147,6 +154,12 @@ type forensicTemplateData struct {
 	EndTime      string
 	MessageCount int
 	DateGroups   []forensicDateGroup
+	// Data summary fields
+	Participants  []string
+	TypeStats     []forensicMsgTypeStat
+	FirstMsgTime  string
+	LastMsgTime   string
+	WatermarkItems []struct{} // fixed-size slice to drive watermark repetition
 }
 
 // buildForensicHTML generates an evidence-grade HTML report with watermark,
@@ -158,6 +171,34 @@ func (s *Service) buildForensicHTML(talkerName, talker string, exportTime, start
 	// Group messages by date
 	dateGroups := s.groupMessagesByDate(messages)
 
+	// Compute participants and type statistics
+	participantSet := make(map[string]struct{})
+	typeCounts := make(map[string]int)
+	var firstMsgTime, lastMsgTime string
+	for i, msg := range messages {
+		sender := msg.SenderName
+		if sender == "" {
+			sender = msg.Sender
+		}
+		participantSet[sender] = struct{}{}
+		typeName := msgTypeName(msg.Type)
+		typeCounts[typeName]++
+		if i == 0 {
+			firstMsgTime = msg.Time.Format("2006-01-02 15:04:05")
+		}
+		if i == len(messages)-1 {
+			lastMsgTime = msg.Time.Format("2006-01-02 15:04:05")
+		}
+	}
+	participants := make([]string, 0, len(participantSet))
+	for p := range participantSet {
+		participants = append(participants, p)
+	}
+	typeStats := make([]forensicMsgTypeStat, 0, len(typeCounts))
+	for name, count := range typeCounts {
+		typeStats = append(typeStats, forensicMsgTypeStat{TypeName: name, Count: count})
+	}
+
 	data := forensicTemplateData{
 		Title:        "WeTrace 取证报告",
 		ReportID:     reportID,
@@ -168,6 +209,11 @@ func (s *Service) buildForensicHTML(talkerName, talker string, exportTime, start
 		EndTime:      endTime.Format("2006-01-02 15:04:05"),
 		MessageCount: len(messages),
 		DateGroups:   dateGroups,
+		Participants: participants,
+		TypeStats:    typeStats,
+		FirstMsgTime: firstMsgTime,
+		LastMsgTime:  lastMsgTime,
+		WatermarkItems: make([]struct{}, 60),
 	}
 
 	tmpl, err := template.New("forensic").Parse(forensicHTMLTemplate)
@@ -199,10 +245,11 @@ func (s *Service) groupMessagesByDate(messages []*model.Message) []forensicDateG
 		content := msg.PlainTextContent()
 
 		fMsg := forensicMsg{
-			Time:    msg.Time.Format("15:04:05"),
-			Sender:  sender,
-			Content: content,
-			IsSelf:  msg.IsSelf,
+			Time:     msg.Time.Format("15:04:05"),
+			Sender:   sender,
+			Content:  content,
+			IsSelf:   msg.IsSelf,
+			TypeIcon: msgTypeIcon(msg.Type),
 		}
 
 		if dateStr != currentDate {
@@ -217,6 +264,62 @@ func (s *Service) groupMessagesByDate(messages []*model.Message) []forensicDateG
 	}
 
 	return groups
+}
+
+// msgTypeName returns a human-readable Chinese name for a message type.
+func msgTypeName(t int64) string {
+	switch t {
+	case 1:
+		return "文本"
+	case 3:
+		return "图片"
+	case 34:
+		return "语音"
+	case 42:
+		return "名片"
+	case 43:
+		return "视频"
+	case 47:
+		return "动画表情"
+	case 48:
+		return "位置"
+	case 49:
+		return "分享/文件"
+	case 50:
+		return "语音通话"
+	case 10000:
+		return "系统消息"
+	default:
+		return "其他"
+	}
+}
+
+// msgTypeIcon returns a CSS class-friendly type indicator for a message type.
+func msgTypeIcon(t int64) string {
+	switch t {
+	case 1:
+		return "text"
+	case 3:
+		return "image"
+	case 34:
+		return "voice"
+	case 42:
+		return "card"
+	case 43:
+		return "video"
+	case 47:
+		return "emoji"
+	case 48:
+		return "location"
+	case 49:
+		return "share"
+	case 50:
+		return "voip"
+	case 10000:
+		return "system"
+	default:
+		return "other"
+	}
 }
 
 // forensicHTMLTemplate is the embedded HTML template for forensic reports.
@@ -235,13 +338,20 @@ body {
     background: #f0f2f5; color: #1a1a2e; line-height: 1.6; position: relative;
 }
 
-/* === Watermark (pure CSS, no JS needed) === */
-body::after {
-    content: "";
-    position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
-    z-index: 9999; pointer-events: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='320'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Microsoft YaHei,PingFang SC,sans-serif' font-size='22' font-weight='700' fill='rgba(180,40,40,0.055)' transform='rotate(-35,240,160)'%3E%E5%8F%96%E8%AF%81%E8%AF%81%E6%8D%AE FORENSIC EVIDENCE%3C/text%3E%3C/svg%3E");
-    background-repeat: repeat;
+/* === Watermark Overlay === */
+.watermark {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 9999; pointer-events: none; overflow: hidden;
+}
+.watermark-inner {
+    position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 60px 80px; transform: rotate(-35deg);
+}
+.watermark-inner span {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 16px; font-weight: 700; color: rgba(180,40,40,0.055);
+    white-space: nowrap; user-select: none;
 }
 
 /* === Page Container === */
@@ -320,6 +430,43 @@ body::after {
 }
 .msg-sender.self { color: #0f3460; }
 .msg-text { flex: 1; color: #444; word-break: break-all; }
+.msg-type-icon {
+    flex-shrink: 0; width: 24px; text-align: center; font-size: 14px; padding-top: 2px;
+}
+.msg-type-icon.text::before { content: "\1F4AC"; }
+.msg-type-icon.image::before { content: "\1F5BC"; }
+.msg-type-icon.voice::before { content: "\1F3A4"; }
+.msg-type-icon.video::before { content: "\1F3AC"; }
+.msg-type-icon.card::before { content: "\1F4C7"; }
+.msg-type-icon.emoji::before { content: "\1F60A"; }
+.msg-type-icon.location::before { content: "\1F4CD"; }
+.msg-type-icon.share::before { content: "\1F517"; }
+.msg-type-icon.voip::before { content: "\1F4DE"; }
+.msg-type-icon.system::before { content: "\2699"; }
+.msg-type-icon.other::before { content: "\1F4CE"; }
+
+/* === Data Summary Table === */
+.summary-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;
+}
+.summary-card {
+    background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 6px;
+    padding: 16px; text-align: center;
+}
+.summary-card .label { font-size: 12px; color: #999; margin-bottom: 4px; }
+.summary-card .value { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+.type-stats-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+.type-stats-table th, .type-stats-table td {
+    padding: 8px 12px; border: 1px solid #e8e8e8; font-size: 13px; text-align: left;
+}
+.type-stats-table th { background: #f8f9fa; font-weight: 600; color: #555; }
+
+/* === Legal Disclaimer === */
+.legal-disclaimer {
+    margin-top: 16px; padding: 16px 20px;
+    background: #fff8f0; border: 1px solid #f0d8b5; border-radius: 6px;
+    font-size: 13px; color: #8a6d3b; line-height: 1.8;
+}
 
 /* === Integrity Section === */
 .checksum-box {
@@ -353,7 +500,8 @@ body::after {
     .page { margin: 0; max-width: 100%; }
     .report-header { border-radius: 0; }
     .report-body { box-shadow: none; border-radius: 0; padding: 30px 40px; }
-    body::after { opacity: 0.6; }
+    .watermark { position: fixed; }
+    .watermark-inner span { color: rgba(180,40,40,0.08); }
     .msg-item { break-inside: avoid; }
     .section { break-inside: avoid; }
     .signature-area { break-before: page; }
@@ -361,6 +509,12 @@ body::after {
 </style>
 </head>
 <body>
+
+<!-- Watermark Overlay with dynamic report ID and export time -->
+<div class="watermark"><div class="watermark-inner">
+{{range .WatermarkItems}}<span>{{$.ReportID}} | {{$.ExportTime}} | 取证证据 FORENSIC</span>
+{{end}}
+</div></div>
 
 <div class="page">
 
@@ -386,14 +540,49 @@ body::after {
     </table>
 </div>
 
-<!-- Section 2: Chat Records -->
+<!-- Section 2: Data Summary -->
 <div class="section">
-    <div class="section-title">二、聊天记录</div>
+    <div class="section-title">二、数据摘要</div>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="label">消息总数</div>
+            <div class="value">{{.MessageCount}}</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">参与者数量</div>
+            <div class="value">{{len .Participants}}</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">最早消息时间</div>
+            <div class="value" style="font-size:14px;">{{.FirstMsgTime}}</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">最晚消息时间</div>
+            <div class="value" style="font-size:14px;">{{.LastMsgTime}}</div>
+        </div>
+    </div>
+    <table class="meta-table" style="margin-bottom:16px;">
+        <tr><td>参与者列表</td><td>{{range $i, $p := .Participants}}{{if $i}}、{{end}}{{$p}}{{end}}</td></tr>
+    </table>
+    {{if .TypeStats}}
+    <table class="type-stats-table">
+        <tr><th>消息类型</th><th>数量</th></tr>
+        {{range .TypeStats}}
+        <tr><td>{{.TypeName}}</td><td>{{.Count}}</td></tr>
+        {{end}}
+    </table>
+    {{end}}
+</div>
+
+<!-- Section 3: Chat Records -->
+<div class="section">
+    <div class="section-title">三、聊天记录</div>
     {{range .DateGroups}}
     <div class="date-group">
         <div class="date-header"><span>{{.Date}}</span></div>
         {{range .Messages}}
         <div class="msg-item">
+            <div class="msg-type-icon {{.TypeIcon}}"></div>
             <div class="msg-time">{{.Time}}</div>
             <div class="msg-sender{{if .IsSelf}} self{{end}}">{{.Sender}}</div>
             <div class="msg-text">{{.Content}}</div>
@@ -403,9 +592,9 @@ body::after {
     {{end}}
 </div>
 
-<!-- Section 3: Integrity Verification -->
+<!-- Section 4: Integrity Verification -->
 <div class="section">
-    <div class="section-title">三、完整性验证</div>
+    <div class="section-title">四、完整性验证</div>
     <p style="font-size:14px; color:#666; margin-bottom:16px;">
         本导出包中的所有文件均附带 SHA-256 哈希校验值，可通过 <code>checksums.sha256</code> 文件验证数据完整性。
     </p>
@@ -421,9 +610,9 @@ body::after {
     </p>
 </div>
 
-<!-- Section 4: Signature -->
+<!-- Section 5: Signature -->
 <div class="section signature-area">
-    <div class="section-title">四、签名确认</div>
+    <div class="section-title">五、签名确认</div>
     <div class="sig-row">
         <span class="sig-label">导出操作人签名：</span>
         <div class="sig-line"></div>
@@ -441,7 +630,12 @@ body::after {
 </div><!-- .report-body -->
 
 <div class="report-footer">
-    本报告由 WeTrace 软件自动生成 | 报告编号: {{.ReportID}} | 生成时间: {{.ExportTime}}
+    <div class="legal-disclaimer">
+        声明：本报告仅供司法取证使用，未经授权不得篡改。报告内容由 WeTrace 软件自动采集并生成，
+        报告中的数据完整性可通过附带的 SHA-256 校验文件进行独立验证。任何对本报告内容的修改均可能导致校验失败，
+        从而影响其作为电子证据的法律效力。
+    </div>
+    <p style="margin-top:16px;">本报告由 WeTrace 软件自动生成 | 报告编号: {{.ReportID}} | 生成时间: {{.ExportTime}}</p>
 </div>
 
 </div><!-- .page -->

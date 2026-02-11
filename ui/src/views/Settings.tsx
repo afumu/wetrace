@@ -326,6 +326,7 @@ function SyncConfigSection() {
   const { data: config, isLoading } = useQuery({
     queryKey: ["sync-config"],
     queryFn: () => systemApi.getSyncConfig(),
+    refetchInterval: (query) => query.state.data?.is_syncing ? 2000 : false,
   })
 
   useEffect(() => {

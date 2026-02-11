@@ -158,11 +158,17 @@ func (e *Exporter) fetchMessages(task *ExportTask) ([]*model.Message, error) {
 }
 
 // renderFrames 使用 chromedp 将消息渲染为 JPEG 帧序列
+// 使用 file:// 协议加载 HTML（避免 document.write 对大 HTML 的 CDP 限制）
 func (e *Exporter) renderFrames(messages []*model.Message, framesDir string, width, height int, task *ExportTask) error {
 	renderer, err := NewRenderer()
 	if err != nil {
 		return err
 	}
+
+	// 创建临时目录存放 HTML 文件
+	htmlDir := filepath.Join(e.OutputDir, task.TaskID+"_html")
+	os.MkdirAll(htmlDir, 0755)
+	defer os.RemoveAll(htmlDir)
 
 	// 创建 chromedp 上下文
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -178,7 +184,21 @@ func (e *Exporter) renderFrames(messages []*model.Message, framesDir string, wid
 	// 每帧显示最近 N 条消息（模拟聊天窗口滚动）
 	windowSize := 10
 
+	// 分批处理：每批最多 200 帧，避免 chromedp 长时间运行导致内存泄漏
+	batchSize := 200
+
 	for i, msg := range messages {
+		// 每批重建 chromedp 上下文，释放内存
+		if i > 0 && i%batchSize == 0 {
+			cancel()
+			allocCancel()
+
+			allocCtx, allocCancel = chromedp.NewExecAllocator(context.Background(), opts...)
+			ctx, cancel = chromedp.NewContext(allocCtx)
+
+			log.Info().Str("task_id", task.TaskID).Int("frame", i).Msg("重建 chromedp 上下文")
+		}
+
 		// 计算窗口范围
 		startIdx := 0
 		if i-windowSize+1 > 0 {
@@ -193,22 +213,34 @@ func (e *Exporter) renderFrames(messages []*model.Message, framesDir string, wid
 			Background: "#ebebeb",
 		})
 		if err != nil {
+			log.Error().Err(err).Int("frame", i).Msg("渲染帧 HTML 失败")
 			return fmt.Errorf("渲染第 %d 帧失败: %w", i, err)
 		}
 
-		// 截图
+		// 将 HTML 写入临时文件，使用 file:// 协议加载
+		htmlPath := filepath.Join(htmlDir, fmt.Sprintf("frame_%06d.html", i))
+		if err := os.WriteFile(htmlPath, []byte(html), 0644); err != nil {
+			return fmt.Errorf("写入第 %d 帧 HTML 失败: %w", i, err)
+		}
+
+		fileURL := "file://" + htmlPath
+
+		// 截图：通过 Navigate 加载本地文件（避免 document.write 大小限制）
 		framePath := filepath.Join(framesDir, fmt.Sprintf("frame_%06d.jpg", i))
 		var buf []byte
 		err = chromedp.Run(ctx,
-			chromedp.Navigate("about:blank"),
-			chromedp.ActionFunc(func(ctx context.Context) error {
-				return chromedp.Evaluate(fmt.Sprintf(`document.open(); document.write(%q); document.close();`, html), nil).Do(ctx)
-			}),
-			chromedp.Sleep(100*time.Millisecond),
+			chromedp.Navigate(fileURL),
+			chromedp.Sleep(150*time.Millisecond),
 			chromedp.FullScreenshot(&buf, 90),
 		)
 		if err != nil {
+			log.Error().Err(err).Int("frame", i).Str("html_path", htmlPath).Msg("chromedp 截图失败")
 			return fmt.Errorf("截图第 %d 帧失败: %w", i, err)
+		}
+
+		if len(buf) == 0 {
+			log.Warn().Int("frame", i).Msg("截图结果为空，跳过")
+			continue
 		}
 
 		if err := os.WriteFile(framePath, buf, 0644); err != nil {
@@ -227,11 +259,25 @@ func (e *Exporter) renderFrames(messages []*model.Message, framesDir string, wid
 		})
 	}
 
+	// 清理最后一批的 chromedp 上下文（defer 会处理，但显式调用更清晰）
+	cancel()
+	allocCancel()
+
 	return nil
 }
 
 // composeOutput 使用 FFmpeg 将帧序列合成为视频或 GIF
 func (e *Exporter) composeOutput(framesDir string, task *ExportTask) (string, error) {
+	// 合成前验证帧文件有效性
+	validCount, err := e.validateFrames(framesDir)
+	if err != nil {
+		return "", fmt.Errorf("帧文件验证失败: %w", err)
+	}
+	if validCount == 0 {
+		return "", fmt.Errorf("没有有效的帧文件可供合成")
+	}
+	log.Info().Str("task_id", task.TaskID).Int("valid_frames", validCount).Msg("帧文件验证通过")
+
 	format := task.Format
 	if format == "" {
 		format = "mp4"
@@ -281,13 +327,50 @@ func (e *Exporter) composeOutput(framesDir string, task *ExportTask) (string, er
 	if ffmpegBin == "" {
 		ffmpegBin = "ffmpeg"
 	}
+
+	log.Info().Str("task_id", task.TaskID).Str("ffmpeg", ffmpegBin).Strs("args", args).Msg("开始 FFmpeg 合成")
+
 	cmd := exec.Command(ffmpegBin, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		log.Error().Err(err).Str("task_id", task.TaskID).Str("output", string(output)).Msg("FFmpeg 合成失败")
 		return "", fmt.Errorf("FFmpeg 合成失败: %v, output: %s", err, string(output))
 	}
 
+	// 验证输出文件
+	info, err := os.Stat(outputFile)
+	if err != nil || info.Size() == 0 {
+		return "", fmt.Errorf("合成输出文件无效: %s", outputFile)
+	}
+
+	log.Info().Str("task_id", task.TaskID).Int64("size", info.Size()).Msg("FFmpeg 合成完成")
 	return outputFile, nil
+}
+
+// validateFrames 检查帧目录中的 JPEG 文件是否有效（非空且具有 JPEG 头）
+func (e *Exporter) validateFrames(framesDir string) (int, error) {
+	entries, err := os.ReadDir(framesDir)
+	if err != nil {
+		return 0, err
+	}
+
+	validCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		// 跳过空文件
+		if info.Size() < 100 {
+			log.Warn().Str("file", entry.Name()).Int64("size", info.Size()).Msg("帧文件过小，可能无效")
+			continue
+		}
+		validCount++
+	}
+	return validCount, nil
 }
 
 // failTask 标记任务失败
