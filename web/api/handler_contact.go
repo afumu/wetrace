@@ -204,3 +204,25 @@ func (a *API) exportContactsXLSX(contacts []*model.Contact) ([]byte, error) {
 
 	return buf.Bytes(), nil
 }
+
+// GetNeedContactList 处理获取需要联系的客户列表的请求。
+func (a *API) GetNeedContactList(c *gin.Context) {
+	daysStr := c.DefaultQuery("days", "7")
+	days := 7
+	if _, err := fmt.Sscanf(daysStr, "%d", &days); err != nil || days <= 0 {
+		days = 7
+	}
+
+	items, err := a.Store.GetNeedContactList(c.Request.Context(), days)
+	if err != nil {
+		log.Error().Err(err).Int("days", days).Msg("获取需要联系的客户列表失败")
+		transport.InternalServerError(c, "获取客户联系提醒列表失败。")
+		return
+	}
+
+	if items == nil {
+		items = make([]*model.NeedContactItem, 0)
+	}
+
+	transport.SendSuccess(c, items)
+}

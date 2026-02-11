@@ -42,6 +42,9 @@ type Store interface {
 	// 年度报告
 	GetAnnualReport(ctx context.Context, year int) (*model.AnnualReport, error)
 
+	// 客户联系提醒
+	GetNeedContactList(ctx context.Context, days int) ([]*model.NeedContactItem, error)
+
 	// Watch 注册文件系统事件的回调函数
 	Watch(group string, callback func(event fsnotify.Event) error) error
 

@@ -83,7 +83,7 @@ func (a *API) ExportChat(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-// ExportForensic 处理法律取证导出请求，返回包含 report.pdf + chat_data.csv + checksums.sha256 + metadata.json 的 ZIP 包
+// ExportForensic 处理法律取证导出请求，返回包含 report.html + chat_data.csv + checksums.sha256 + metadata.json 的 ZIP 包
 func (a *API) ExportForensic(c *gin.Context) {
 	talker := c.Query("talker")
 	talkerName := c.Query("name")

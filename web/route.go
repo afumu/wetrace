@@ -59,6 +59,10 @@ func (s *Service) setupRoutes() {
 			system.POST("/backup_config", s.api.UpdateBackupConfig)
 			system.POST("/backup/run", s.api.RunBackup)
 			system.GET("/backup/history", s.api.GetBackupHistory)
+
+			// TTS 语音转文字配置路由
+			system.GET("/tts_config", s.api.GetTTSConfig)
+			system.POST("/tts_config", s.api.UpdateTTSConfig)
 		}
 
 		// 会话路由
@@ -73,6 +77,7 @@ func (s *Service) setupRoutes() {
 
 		// 联系人路由
 		v1.GET("/contacts", s.api.GetContacts)
+		v1.GET("/contacts/need-contact", s.api.GetNeedContactList)
 		v1.GET("/contacts/:id", s.api.GetContactByID)
 		v1.GET("/contacts/export", s.api.ExportContacts)
 
@@ -86,10 +91,12 @@ func (s *Service) setupRoutes() {
 		v1.GET("/media/emoji", s.api.GetEmoji)
 		v1.POST("/media/cache/start", s.api.HandleStartCache)
 		v1.GET("/media/cache/status", s.api.GetCacheStatus)
+		v1.POST("/media/voice/transcribe", s.api.TranscribeVoice)
 
 		// 导出路由
 		v1.GET("/export/chat", s.api.ExportChat)
 		v1.GET("/export/forensic", s.api.ExportForensic)
+		v1.GET("/export/voices", s.api.ExportVoices)
 
 		// 搜索路由
 		searchGroup := v1.Group("/search")
@@ -158,6 +165,7 @@ func (s *Service) setupRoutes() {
 			feishuGroup.GET("/config", s.api.GetFeishuConfig)
 			feishuGroup.PUT("/config", s.api.UpdateFeishuConfig)
 			feishuGroup.POST("/test", s.api.TestFeishuBot)
+			feishuGroup.POST("/test_bitable", s.api.TestFeishuBitable)
 		}
 	}
 

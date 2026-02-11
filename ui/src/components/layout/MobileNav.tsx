@@ -2,7 +2,7 @@ import { useAppStore } from "@/stores/app"
 import { cn } from "@/lib/utils"
 import {
   MessageSquare, Search, Users, ImageIcon, MoreHorizontal,
-  Shield, Settings, X,
+  Shield, Settings, X, Clock,
   CalendarDays, Heart, Cloud, BrainCircuit, PlayCircle,
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
@@ -52,6 +52,7 @@ export function MobileNav() {
     {
       label: '其他',
       items: [
+        { key: 'contact-reminder', icon: Clock, label: '联系提醒', path: '/contact-reminder' },
         { key: 'monitor', icon: Shield, label: '监控', path: '/monitor' },
         { key: 'settings', icon: Settings, label: '设置', path: '/settings' },
       ],

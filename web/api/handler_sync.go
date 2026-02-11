@@ -53,6 +53,10 @@ func (a *API) TriggerSync(c *gin.Context) {
 		return
 	}
 
+	if !a.SyncScheduler.StartSync() {
+		transport.SendSuccess(c, gin.H{"status": "already_syncing"})
+		return
+	}
 	go a.SyncScheduler.RunSync()
 	transport.SendSuccess(c, gin.H{"status": "syncing"})
 }

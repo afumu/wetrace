@@ -250,7 +250,7 @@ func (a *API) GetWeChatDbKey(c *gin.Context) {
 
 // GetWeChatImageKey 获取微信图片解密密钥 (参考 CliController.runImageKeyMode 逻辑)
 func (a *API) GetWeChatImageKey(c *gin.Context) {
-	log.Info().Msg("开始获取微信图片解密密钥 (持续扫描模式，最长 3 分钟)...")
+	log.Info().Msg("开始获取微信图片解密密钥 (持续扫描模式，最长 2 分钟)...")
 
 	pm := process.NewProcessManager()
 
@@ -288,18 +288,18 @@ func (a *API) GetWeChatImageKey(c *gin.Context) {
 	l := logger.NewLogger(false, true, true)
 	svc := imagekey.NewImageKeyService(l)
 
-	// 设置 3 分钟截止时间
-	deadline := time.Now().Add(3 * time.Minute)
+	// 设置 2 分钟截止时间
+	deadline := time.Now().Add(2 * time.Minute)
 	retryInterval := 3 * time.Second
 	firstAttempt := true
 
 	for {
 		// 检查是否超时
 		if time.Now().After(deadline) {
-			log.Error().Msg("获取图片密钥超时 (3 分钟)")
+			log.Error().Msg("获取图片密钥超时 (2 分钟)")
 			c.JSON(http.StatusRequestTimeout, gin.H{
 				"success": false,
-				"message": "获取图片密钥超时。请确保微信已登录并在 3 分钟内打开过至少一张图片。",
+				"message": "获取图片密钥超时。请确保微信已登录并在 2 分钟内打开过至少一张图片。",
 			})
 			return
 		}

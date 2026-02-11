@@ -55,3 +55,27 @@ func (a *API) TestFeishuBot(c *gin.Context) {
 	}
 	transport.SendSuccess(c, gin.H{"status": "ok", "message": "测试消息已发送"})
 }
+
+// TestFeishuBitable 测试飞书多维表格连通性
+func (a *API) TestFeishuBitable(c *gin.Context) {
+	if a.Monitor == nil {
+		transport.BadRequest(c, "监控功能未初始化")
+		return
+	}
+
+	cfg := a.Monitor.GetFeishuConfig()
+	if cfg.AppID == "" || cfg.AppSecret == "" {
+		transport.BadRequest(c, "飞书应用 AppID/AppSecret 未配置")
+		return
+	}
+	if cfg.AppToken == "" || cfg.TableID == "" {
+		transport.BadRequest(c, "多维表格 AppToken/TableID 未配置")
+		return
+	}
+
+	if err := monitor.TestBitableConnection(cfg.AppID, cfg.AppSecret, cfg.AppToken, cfg.TableID); err != nil {
+		transport.InternalServerError(c, "多维表格测试失败: "+err.Error())
+		return
+	}
+	transport.SendSuccess(c, gin.H{"status": "ok", "message": "多维表格连通性测试成功"})
+}

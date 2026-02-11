@@ -14,6 +14,7 @@ import Gallery from '@/views/Gallery'
 import Settings from '@/views/Settings'
 import MonitorView from '@/views/MonitorView'
 import ReplayView from '@/views/ReplayView'
+import ContactReminder from '@/views/ContactReminder'
 import { PaymentModal } from '@/components/PaymentModal'
 import { AgreementModal } from '@/components/AgreementModal'
 import { ComplianceDialog } from '@/components/ComplianceDialog'
@@ -97,6 +98,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="monitor" element={<MonitorView />} />
           <Route path="replay" element={<ReplayView />} />
+          <Route path="contact-reminder" element={<ContactReminder />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -6,6 +6,7 @@ import type {
   AIConfigUpdate,
   SyncConfigUpdate,
   BackupConfigUpdate,
+  TTSConfigUpdate,
 } from "@/api/system"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,6 +24,8 @@ import {
   MessageSquare,
   RotateCcw,
   Search,
+  X,
+  Mic,
 } from "lucide-react"
 
 /* ============================================================
@@ -38,6 +41,7 @@ function AIConfigSection() {
     api_key: "",
   })
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle")
+  const [showPromptsDialog, setShowPromptsDialog] = useState(false)
 
   const { data: config, isLoading } = useQuery({
     queryKey: ["ai-config"],
@@ -150,16 +154,164 @@ function AIConfigSection() {
             保存配置
           </Button>
           {form.enabled && (
-            <Button variant="outline" size="sm" onClick={handleTest} disabled={testStatus === "testing"}>
-              {testStatus === "testing" && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              {testStatus === "success" && <CheckCircle className="w-4 h-4 text-green-500 mr-1" />}
-              {testStatus === "error" && <XCircle className="w-4 h-4 text-destructive mr-1" />}
-              测试连接
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleTest} disabled={testStatus === "testing"}>
+                {testStatus === "testing" && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                {testStatus === "success" && <CheckCircle className="w-4 h-4 text-green-500 mr-1" />}
+                {testStatus === "error" && <XCircle className="w-4 h-4 text-destructive mr-1" />}
+                测试连接
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowPromptsDialog(true)}>
+                <MessageSquare className="w-4 h-4 mr-1" />
+                修改默认提示词
+              </Button>
+            </>
           )}
         </div>
       </CardContent>
+
+      {showPromptsDialog && (
+        <AIPromptsDialog onClose={() => setShowPromptsDialog(false)} />
+      )}
     </Card>
+  )
+}
+
+/* ============================================================
+ * AI Prompts Dialog (Tab-based)
+ * ============================================================ */
+const PROMPT_LABELS: Record<string, string> = {
+  summarize: "聊天总结",
+  simulate: "模拟对话",
+  sentiment: "情感分析",
+  summary: "结构化摘要",
+  extract_todos: "待办提取",
+  extract_info: "关键信息抽取",
+}
+
+const PROMPT_KEYS = Object.keys(PROMPT_LABELS)
+
+function AIPromptsDialog({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [prompts, setPrompts] = useState<Record<string, string>>({})
+  const [defaults, setDefaults] = useState<Record<string, string>>({})
+  const [activeTab, setActiveTab] = useState(PROMPT_KEYS[0])
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["ai-prompts"],
+    queryFn: () => systemApi.getAIPrompts(),
+  })
+
+  useEffect(() => {
+    if (data) {
+      setPrompts(data.prompts || {})
+      setDefaults(data.defaults || {})
+    }
+  }, [data])
+
+  const updateMutation = useMutation({
+    mutationFn: (p: Record<string, string>) => systemApi.updateAIPrompts(p),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-prompts"] })
+      toast.success("AI 提示词配置已保存")
+      onClose()
+    },
+    onError: (err: Error) => toast.error("保存失败: " + err.message),
+  })
+
+  const handleReset = (key: string) => {
+    if (defaults[key]) {
+      setPrompts((prev) => ({ ...prev, [key]: defaults[key] }))
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div
+        className="bg-background border shadow-2xl rounded-2xl w-full max-w-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-lg">AI 提示词配置</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              自定义各 AI 功能的提示词，留空将使用默认值
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <div className="p-12 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {/* Tabs */}
+            <div className="flex border-b px-4 overflow-x-auto">
+              {PROMPT_KEYS.map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`px-3 py-2.5 text-sm whitespace-nowrap border-b-2 transition-colors ${
+                    activeTab === key
+                      ? "border-primary text-primary font-medium"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {PROMPT_LABELS[key]}
+                </button>
+              ))}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  模板变量：模拟对话支持 {"{{target_name}}"} 和 {"{{history}}"}；情感分析支持 {"{{monthly_texts}}"}；关键信息抽取支持 {"{{types_hint}}"}。
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground shrink-0"
+                  onClick={() => handleReset(activeTab)}
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  重置默认
+                </Button>
+              </div>
+              <textarea
+                className="w-full min-h-[260px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
+                value={prompts[activeTab] || ""}
+                onChange={(e) =>
+                  setPrompts((prev) => ({ ...prev, [activeTab]: e.target.value }))
+                }
+                placeholder={defaults[activeTab]?.slice(0, 200) + "..."}
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t flex items-center justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={onClose}>
+                取消
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => updateMutation.mutate(prompts)}
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                保存提示词
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+      <div className="absolute inset-0 -z-10" onClick={onClose} />
+    </div>
   )
 }
 
@@ -669,48 +821,43 @@ function BackupConfigSection() {
 }
 
 /* ============================================================
- * AI Prompts Config Section
+ * TTS Voice-to-Text Config Section
  * ============================================================ */
-const PROMPT_LABELS: Record<string, string> = {
-  summarize: "聊天总结",
-  simulate: "模拟对话",
-  sentiment: "情感分析",
-  summary: "结构化摘要",
-  extract_todos: "待办提取",
-  extract_info: "关键信息抽取",
-}
-
-function AIPromptsSection() {
+function TTSConfigSection() {
   const queryClient = useQueryClient()
-  const [prompts, setPrompts] = useState<Record<string, string>>({})
-  const [defaults, setDefaults] = useState<Record<string, string>>({})
+  const [form, setForm] = useState<TTSConfigUpdate>({
+    enabled: false,
+    provider: "openai",
+    base_url: "",
+    api_key: "",
+    model: "whisper-1",
+  })
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["ai-prompts"],
-    queryFn: () => systemApi.getAIPrompts(),
+  const { data: config, isLoading } = useQuery({
+    queryKey: ["tts-config"],
+    queryFn: () => systemApi.getTTSConfig(),
   })
 
   useEffect(() => {
-    if (data) {
-      setPrompts(data.prompts || {})
-      setDefaults(data.defaults || {})
+    if (config) {
+      setForm({
+        enabled: config.enabled,
+        provider: config.provider || "openai",
+        base_url: config.base_url || "",
+        api_key: "",
+        model: config.model || "whisper-1",
+      })
     }
-  }, [data])
+  }, [config])
 
   const updateMutation = useMutation({
-    mutationFn: (p: Record<string, string>) => systemApi.updateAIPrompts(p),
+    mutationFn: (data: TTSConfigUpdate) => systemApi.updateTTSConfig(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ai-prompts"] })
-      toast.success("AI 提示词配置已保存")
+      queryClient.invalidateQueries({ queryKey: ["tts-config"] })
+      toast.success("语音转文字配置已保存")
     },
     onError: (err: Error) => toast.error("保存失败: " + err.message),
   })
-
-  const handleReset = (key: string) => {
-    if (defaults[key]) {
-      setPrompts((prev) => ({ ...prev, [key]: defaults[key] }))
-    }
-  }
 
   if (isLoading) {
     return (
@@ -726,51 +873,72 @@ function AIPromptsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-primary" />
-          AI 提示词配置
+          <Mic className="w-4 h-4 text-primary" />
+          语音转文字 (Whisper)
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-5">
-        <p className="text-xs text-muted-foreground">
-          自定义各 AI 功能的提示词。留空或点击重置将使用默认提示词。
-          模板变量：模拟对话支持 {"{{target_name}}"} 和 {"{{history}}"}；情感分析支持 {"{{monthly_texts}}"}；关键信息抽取支持 {"{{types_hint}}"}。
-        </p>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium leading-none">启用语音转文字</label>
+          <Switch
+            checked={form.enabled}
+            onCheckedChange={(checked) => setForm((f) => ({ ...f, enabled: checked }))}
+          />
+        </div>
 
-        {Object.keys(PROMPT_LABELS).map((key) => (
-          <div key={key} className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium leading-none">
-                {PROMPT_LABELS[key]}
-              </label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-muted-foreground"
-                onClick={() => handleReset(key)}
-              >
-                <RotateCcw className="w-3 h-3 mr-1" />
-                重置默认
-              </Button>
+        {form.enabled && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium leading-none">提供商</label>
+              <Input
+                value={form.provider || ""}
+                onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}
+                placeholder="openai"
+                className="h-9"
+              />
             </div>
-            <textarea
-              className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
-              value={prompts[key] || ""}
-              onChange={(e) =>
-                setPrompts((prev) => ({ ...prev, [key]: e.target.value }))
-              }
-              placeholder={defaults[key]?.slice(0, 100) + "..."}
-            />
-          </div>
-        ))}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium leading-none">模型名称</label>
+              <Input
+                value={form.model || ""}
+                onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                placeholder="whisper-1"
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium leading-none">API 地址</label>
+              <Input
+                value={form.base_url || ""}
+                onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
+                placeholder="https://api.openai.com/v1"
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium leading-none">API Key</label>
+              <Input
+                type="password"
+                value={form.api_key || ""}
+                onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+                placeholder={config?.api_key_masked || "输入 API Key"}
+                className="h-9"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              配置后，语音消息旁会出现"转文字"按钮，点击即可将语音转为文字。支持 OpenAI Whisper 兼容接口。
+            </p>
+          </>
+        )}
 
         <div className="flex items-center gap-2 pt-2">
           <Button
             size="sm"
-            onClick={() => updateMutation.mutate(prompts)}
+            onClick={() => updateMutation.mutate(form)}
             disabled={updateMutation.isPending}
           >
             {updateMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-            保存提示词
+            保存配置
           </Button>
         </div>
       </CardContent>
@@ -791,7 +959,7 @@ export default function SettingsView() {
         </div>
 
         <AIConfigSection />
-        <AIPromptsSection />
+        <TTSConfigSection />
         <SyncConfigSection />
         <PasswordSection />
         <BackupConfigSection />

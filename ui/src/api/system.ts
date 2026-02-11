@@ -97,9 +97,9 @@ export const systemApi = {
   decrypt: () => request.post("/api/v1/system/decrypt"),
   getStatus: () => request.get("/api/v1/system/status"),
   getWeChatDbKey: (config?: AxiosRequestConfig) =>
-    request.get("/api/v1/system/wxkey/db", {}, { timeout: 180000, ...config }),
+    request.get("/api/v1/system/wxkey/db", {}, { timeout: 130000, ...config }),
   getWeChatImageKey: (config?: AxiosRequestConfig) =>
-    request.get("/api/v1/system/wxkey/image", {}, { timeout: 300000, ...config }),
+    request.get("/api/v1/system/wxkey/image", {}, { timeout: 130000, ...config }),
   activate: (license: string) => request.post("/api/v1/system/activate", { license }),
   detectWeChatPath: () => request.get("/api/v1/system/detect/wechat_path"),
   detectDbPath: () => request.get("/api/v1/system/detect/db_path"),

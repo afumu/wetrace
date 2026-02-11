@@ -10,18 +10,21 @@ import (
 
 // MonitorConfig 统一监控配置（关键词匹配 + AI匹配）
 type MonitorConfig struct {
-	ID         int64    `json:"id"`
-	Name       string   `json:"name"`
-	Type       string   `json:"type"`        // "keyword" | "ai"
-	Prompt     string   `json:"prompt"`       // AI提示词（type=ai时使用）
-	Keywords   []string `json:"keywords"`     // 关键词列表（type=keyword时使用）
-	Platform   string   `json:"platform"`     // "webhook" | "feishu"
-	WebhookURL string   `json:"webhook_url"`  // 通用Webhook URL
-	FeishuURL  string   `json:"feishu_url"`   // 飞书机器人Webhook URL
-	Secret     string   `json:"secret"`       // 签名密钥（可选）
-	Enabled    bool     `json:"enabled"`
-	CreatedAt  int64    `json:"created_at"`
-	UpdatedAt  int64    `json:"updated_at"`
+	ID              int64    `json:"id"`
+	Name            string   `json:"name"`
+	Type            string   `json:"type"`             // "keyword" | "ai"
+	Prompt          string   `json:"prompt"`            // AI提示词（type=ai时使用）
+	Keywords        []string `json:"keywords"`          // 关键词列表（type=keyword时使用）
+	Platform        string   `json:"platform"`          // "webhook" | "feishu"
+	WebhookURL      string   `json:"webhook_url"`       // 通用Webhook URL
+	FeishuURL       string   `json:"feishu_url"`        // 飞书机器人Webhook URL
+	Secret          string   `json:"secret"`            // 签名密钥（可选）
+	Enabled         bool     `json:"enabled"`
+	SessionIDs      []string `json:"session_ids"`       // 监控哪些会话（空=全部）
+	IntervalMinutes int      `json:"interval_minutes"`  // 监控间隔（分钟）
+	LastCheckTime   int64    `json:"last_check_time"`   // 上次检查时间
+	CreatedAt       int64    `json:"created_at"`
+	UpdatedAt       int64    `json:"updated_at"`
 }
 
 // FeishuConfig 飞书平台全局配置
@@ -29,6 +32,12 @@ type FeishuConfig struct {
 	BotWebhook string `json:"bot_webhook"`
 	SignSecret string `json:"sign_secret"`
 	Enabled    bool   `json:"enabled"`
+	// 多维表格配置
+	AppID     string `json:"app_id"`
+	AppSecret string `json:"app_secret"`
+	AppToken  string `json:"app_token"`
+	TableID   string `json:"table_id"`
+	PushType  string `json:"push_type"` // "bot" | "bitable" | "both"
 }
 
 // storeData 持久化数据结构
@@ -159,4 +168,17 @@ func (s *Store) GetEnabledConfigs() []MonitorConfig {
 		}
 	}
 	return result
+}
+
+// UpdateLastCheckTime 更新指定配置的上次检查时间
+func (s *Store) UpdateLastCheckTime(id int64, t int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Configs {
+		if s.data.Configs[i].ID == id {
+			s.data.Configs[i].LastCheckTime = t
+			return s.save()
+		}
+	}
+	return os.ErrNotExist
 }

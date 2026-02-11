@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { monitorApi } from "@/api/monitor"
+import { sessionApi } from "@/api"
 import { toast } from "sonner"
 import type { MonitorConfig, MonitorConfigCreate, FeishuConfigUpdate } from "@/api/monitor"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -19,6 +20,7 @@ import {
   Send,
   X,
   AlertTriangle,
+  Search,
 } from "lucide-react"
 
 type EditingConfig = MonitorConfigCreate & { id?: number }
@@ -32,6 +34,8 @@ const emptyForm: EditingConfig = {
   webhook_url: "",
   feishu_url: "",
   enabled: true,
+  session_ids: [],
+  interval_minutes: 5,
 }
 
 /* ============================================================
@@ -50,6 +54,34 @@ function ConfigFormDialog({
 }) {
   const [form, setForm] = useState<EditingConfig>(initial)
   const [keywordInput, setKeywordInput] = useState("")
+  const [sessionSearch, setSessionSearch] = useState("")
+
+  const { data: sessionData } = useQuery({
+    queryKey: ["monitor-sessions"],
+    queryFn: () => sessionApi.getSessions({ limit: 10000 }),
+  })
+
+  const filteredSessions = useMemo(() => {
+    if (!sessionData?.items) return []
+    if (!sessionSearch.trim()) return sessionData.items
+    const kw = sessionSearch.trim().toLowerCase()
+    return sessionData.items.filter(
+      (s) =>
+        (s.name || "").toLowerCase().includes(kw) ||
+        (s.talkerName || "").toLowerCase().includes(kw) ||
+        s.talker.toLowerCase().includes(kw)
+    )
+  }, [sessionData, sessionSearch])
+
+  const handleToggleSession = (id: string) => {
+    setForm((f) => {
+      const ids = f.session_ids || []
+      return {
+        ...f,
+        session_ids: ids.includes(id) ? ids.filter((s) => s !== id) : [...ids, id],
+      }
+    })
+  }
 
   const addKeyword = () => {
     const kw = keywordInput.trim()
@@ -206,6 +238,60 @@ function ConfigFormDialog({
           </div>
         )}
 
+        {/* Interval */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium leading-none">检查间隔（分钟）</label>
+          <Input
+            type="number"
+            min={1}
+            max={1440}
+            value={form.interval_minutes || 5}
+            onChange={(e) => setForm((f) => ({ ...f, interval_minutes: Number(e.target.value) }))}
+            className="h-9 w-32"
+          />
+          <p className="text-xs text-muted-foreground">每隔多少分钟检查一次新消息，最小1分钟</p>
+        </div>
+
+        {/* Session Selector */}
+        <div className="space-y-2 border rounded-md p-3">
+          <label className="text-sm font-medium leading-none">监控会话</label>
+          <p className="text-xs text-muted-foreground">
+            选择要监控的会话，未选择则不监控任何会话。已选 {(form.session_ids || []).length} 个。
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                placeholder="搜索会话..."
+                className="h-8 pl-7 text-xs"
+              />
+            </div>
+          </div>
+          <div className="max-h-40 overflow-y-auto border rounded-md divide-y">
+            {filteredSessions.map((s) => (
+              <label
+                key={s.talker}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={(form.session_ids || []).includes(s.talker)}
+                  onChange={() => handleToggleSession(s.talker)}
+                  className="accent-primary"
+                />
+                <span className="truncate">{s.name || s.talkerName || s.talker}</span>
+              </label>
+            ))}
+            {filteredSessions.length === 0 && (
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                {sessionSearch ? "未找到匹配的会话" : "暂无会话数据"}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Enabled */}
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium leading-none">启用</label>
@@ -239,8 +325,16 @@ function FeishuConfigSection() {
     bot_webhook: "",
     sign_secret: "",
     enabled: false,
+    app_id: "",
+    app_secret: "",
+    app_token: "",
+    table_id: "",
+    push_type: "bot",
   })
   const [testStatus, setTestStatus] = useState<
+    "idle" | "testing" | "success" | "error"
+  >("idle")
+  const [bitableTestStatus, setBitableTestStatus] = useState<
     "idle" | "testing" | "success" | "error"
   >("idle")
 
@@ -255,6 +349,11 @@ function FeishuConfigSection() {
         bot_webhook: config.bot_webhook || "",
         sign_secret: config.sign_secret || "",
         enabled: config.enabled,
+        app_id: config.app_id || "",
+        app_secret: config.app_secret || "",
+        app_token: config.app_token || "",
+        table_id: config.table_id || "",
+        push_type: config.push_type || "bot",
       })
     }
   }, [config])
@@ -276,6 +375,16 @@ function FeishuConfigSection() {
       setTestStatus("success")
     } catch {
       setTestStatus("error")
+    }
+  }
+
+  const handleBitableTest = async () => {
+    setBitableTestStatus("testing")
+    try {
+      await monitorApi.testFeishuBitable()
+      setBitableTestStatus("success")
+    } catch {
+      setBitableTestStatus("error")
     }
   }
 
@@ -310,40 +419,107 @@ function FeishuConfigSection() {
 
         {form.enabled && (
           <>
+            {/* 推送方式选择 */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium leading-none">
-                机器人 Webhook URL
-              </label>
-              <Input
-                value={form.bot_webhook}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, bot_webhook: e.target.value }))
-                }
-                placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
-                className="h-9"
-              />
+              <label className="text-sm font-medium leading-none">推送方式</label>
+              <div className="flex gap-2">
+                {(["bot", "bitable", "both"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    size="sm"
+                    variant={form.push_type === t ? "default" : "outline"}
+                    onClick={() => setForm((f) => ({ ...f, push_type: t }))}
+                  >
+                    {t === "bot" ? "机器人" : t === "bitable" ? "多维表格" : "两者都用"}
+                  </Button>
+                ))}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium leading-none">
-                签名密钥（可选）
-              </label>
-              <Input
-                type="password"
-                value={form.sign_secret || ""}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, sign_secret: e.target.value }))
-                }
-                placeholder="签名校验密钥"
-                className="h-9"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              在飞书群中添加自定义机器人，获取 Webhook URL 后填入上方。
-            </p>
+
+            {/* 机器人配置 */}
+            {(form.push_type === "bot" || form.push_type === "both") && (
+              <div className="space-y-3 border rounded-md p-3">
+                <p className="text-xs font-medium text-muted-foreground">机器人推送配置</p>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium leading-none">
+                    机器人 Webhook URL
+                  </label>
+                  <Input
+                    value={form.bot_webhook}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, bot_webhook: e.target.value }))
+                    }
+                    placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium leading-none">
+                    签名密钥（可选）
+                  </label>
+                  <Input
+                    type="password"
+                    value={form.sign_secret || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, sign_secret: e.target.value }))
+                    }
+                    placeholder="签名校验密钥"
+                    className="h-9"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* 多维表格配置 */}
+            {(form.push_type === "bitable" || form.push_type === "both") && (
+              <div className="space-y-3 border rounded-md p-3">
+                <p className="text-xs font-medium text-muted-foreground">多维表格推送配置</p>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium leading-none">App ID</label>
+                  <Input
+                    value={form.app_id || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, app_id: e.target.value }))}
+                    placeholder="飞书应用 App ID"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium leading-none">App Secret</label>
+                  <Input
+                    type="password"
+                    value={form.app_secret || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, app_secret: e.target.value }))}
+                    placeholder="飞书应用 App Secret"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium leading-none">多维表格 App Token</label>
+                  <Input
+                    value={form.app_token || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, app_token: e.target.value }))}
+                    placeholder="多维表格链接中的 app_token"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium leading-none">数据表 Table ID</label>
+                  <Input
+                    value={form.table_id || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, table_id: e.target.value }))}
+                    placeholder="数据表 ID"
+                    className="h-9"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  需要在飞书开放平台创建应用并授权多维表格权限。表格需包含字段：发送人、会话、消息内容、触发规则、消息时间、告警时间。
+                </p>
+              </div>
+            )}
           </>
         )}
 
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 flex-wrap">
           <Button
             size="sm"
             onClick={() => updateMutation.mutate(form)}
@@ -354,7 +530,7 @@ function FeishuConfigSection() {
             )}
             保存配置
           </Button>
-          {form.enabled && (
+          {form.enabled && (form.push_type === "bot" || form.push_type === "both") && (
             <Button
               variant="outline"
               size="sm"
@@ -370,7 +546,26 @@ function FeishuConfigSection() {
               {testStatus === "error" && (
                 <XCircle className="w-4 h-4 text-destructive mr-1" />
               )}
-              测试连通性
+              测试机器人
+            </Button>
+          )}
+          {form.enabled && (form.push_type === "bitable" || form.push_type === "both") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBitableTest}
+              disabled={bitableTestStatus === "testing"}
+            >
+              {bitableTestStatus === "testing" && (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              )}
+              {bitableTestStatus === "success" && (
+                <CheckCircle className="w-4 h-4 text-green-500 mr-1" />
+              )}
+              {bitableTestStatus === "error" && (
+                <XCircle className="w-4 h-4 text-destructive mr-1" />
+              )}
+              测试多维表格
             </Button>
           )}
         </div>

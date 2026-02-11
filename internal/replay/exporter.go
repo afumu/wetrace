@@ -157,7 +157,7 @@ func (e *Exporter) fetchMessages(task *ExportTask) ([]*model.Message, error) {
 	return e.Store.GetMessages(context.Background(), query)
 }
 
-// renderFrames 使用 chromedp 将消息渲染为 PNG 帧序列
+// renderFrames 使用 chromedp 将消息渲染为 JPEG 帧序列
 func (e *Exporter) renderFrames(messages []*model.Message, framesDir string, width, height int, task *ExportTask) error {
 	renderer, err := NewRenderer()
 	if err != nil {
@@ -197,7 +197,7 @@ func (e *Exporter) renderFrames(messages []*model.Message, framesDir string, wid
 		}
 
 		// 截图
-		framePath := filepath.Join(framesDir, fmt.Sprintf("frame_%06d.png", i))
+		framePath := filepath.Join(framesDir, fmt.Sprintf("frame_%06d.jpg", i))
 		var buf []byte
 		err = chromedp.Run(ctx,
 			chromedp.Navigate("about:blank"),
@@ -251,7 +251,7 @@ func (e *Exporter) composeOutput(framesDir string, task *ExportTask) (string, er
 		fps = 30
 	}
 
-	inputPattern := filepath.Join(framesDir, "frame_%06d.png")
+	inputPattern := filepath.Join(framesDir, "frame_%06d.jpg")
 	var outputFile string
 	var args []string
 
@@ -259,6 +259,7 @@ func (e *Exporter) composeOutput(framesDir string, task *ExportTask) (string, er
 	case "gif":
 		outputFile = filepath.Join(e.OutputDir, task.TaskID+".gif")
 		args = []string{
+			"-f", "image2",
 			"-framerate", fmt.Sprintf("%d", fps),
 			"-i", inputPattern,
 			"-vf", "fps=10,scale=480:-1:flags=lanczos",
@@ -267,6 +268,7 @@ func (e *Exporter) composeOutput(framesDir string, task *ExportTask) (string, er
 	default:
 		outputFile = filepath.Join(e.OutputDir, task.TaskID+".mp4")
 		args = []string{
+			"-f", "image2",
 			"-framerate", fmt.Sprintf("%d", fps),
 			"-i", inputPattern,
 			"-c:v", "libx264",

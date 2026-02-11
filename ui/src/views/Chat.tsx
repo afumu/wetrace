@@ -3,7 +3,7 @@ import { MessageList } from "@/components/chat/MessageList"
 import { useAppStore } from "@/stores/app"
 import { cn } from "@/lib/utils"
 import { useChat } from "@/hooks/useChat"
-import { RefreshCw, ArrowLeft, Smile, PlusCircle, Mic, Download, Sparkles, ImageIcon, Images, BrainCircuit, MessageSquareQuote } from "lucide-react"
+import { RefreshCw, ArrowLeft, Smile, PlusCircle, Mic, Download, Sparkles, ImageIcon, Images, BrainCircuit, MessageSquareQuote, MoreHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { systemApi, mediaApi } from "@/api"
 import { toast } from "sonner"
@@ -30,6 +30,7 @@ export default function Chat() {
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [showAISimulate, setShowAISimulate] = useState(false)
   const [showSessionGallery, setShowSessionGallery] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
 
   const isGroupChat = useMemo(() => {
     return activeTalker?.endsWith('@chatroom')
@@ -165,60 +166,15 @@ export default function Chat() {
                 <h2 className="font-medium text-sm truncate">{displayName}</h2>
               </div>
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="gap-2 text-primary hover:bg-primary/10"
                   onClick={() => handleAISummarize()}
                   title="AI 总结最近对话"
                 >
                   <BrainCircuit className="w-4 h-4" />
                   <span className="text-xs font-bold">AI 总结</span>
-                </Button>
-
-                {!isGroupChat && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="gap-2 text-primary hover:bg-primary/10"
-                    onClick={() => setShowAISimulate(true)}
-                    title="AI 模拟对方语气对话"
-                  >
-                    <MessageSquareQuote className="w-4 h-4" />
-                    <span className="text-xs font-bold">模拟对话</span>
-                  </Button>
-                )}
-
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="gap-2 text-muted-foreground hover:text-primary"
-                  onClick={() => setShowAnalysis(true)}
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span className="text-xs font-bold">会话分析</span>
-                </Button>
-
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="gap-2 text-muted-foreground hover:text-primary"
-                  onClick={handleSessionCache}
-                  title="预加载当前会话图片"
-                >
-                  <ImageIcon className="w-4 h-4" />
-                  <span className="text-xs">加载图片</span>
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground hover:text-primary"
-                  onClick={() => setShowSessionGallery(true)}
-                  title="查看会话所有图片"
-                >
-                  <Images className="w-4 h-4" />
-                  <span className="text-xs">查看图片</span>
                 </Button>
 
                 <Button
@@ -232,16 +188,88 @@ export default function Chat() {
                   <span className="text-xs">导出</span>
                 </Button>
 
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="gap-2 text-muted-foreground hover:text-primary"
-                  onClick={handleSync}
-                  disabled={isSyncing}
-                >
-                  <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
-                  <span className="text-xs">{isSyncing ? '正在同步...' : '同步数据'}</span>
-                </Button>
+                {/* More dropdown */}
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-muted-foreground hover:text-primary"
+                    onClick={() => setShowMoreMenu((v) => !v)}
+                    title="更多操作"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                    <span className="text-xs">更多</span>
+                  </Button>
+                  {showMoreMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-card border rounded-lg shadow-lg py-1 w-44">
+                        {/* AI 功能 */}
+                        <div className="px-3 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">AI 功能</div>
+                        {!isGroupChat && (
+                          <button
+                            className="w-full px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
+                            onClick={() => { setShowAISimulate(true); setShowMoreMenu(false) }}
+                          >
+                            <MessageSquareQuote className="w-4 h-4 text-primary" />
+                            模拟对话
+                          </button>
+                        )}
+                        <button
+                          className="w-full px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
+                          onClick={() => { setShowAnalysis(true); setShowMoreMenu(false) }}
+                        >
+                          <Sparkles className="w-4 h-4 text-primary" />
+                          会话分析
+                        </button>
+
+                        <div className="border-t my-1" />
+                        {/* 媒体 */}
+                        <div className="px-3 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">媒体</div>
+                        <button
+                          className="w-full px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
+                          onClick={() => { handleSessionCache(); setShowMoreMenu(false) }}
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                          加载图片
+                        </button>
+                        <button
+                          className="w-full px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
+                          onClick={() => { setShowSessionGallery(true); setShowMoreMenu(false) }}
+                        >
+                          <Images className="w-4 h-4" />
+                          查看图片
+                        </button>
+                        <button
+                          className="w-full px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
+                          onClick={() => {
+                            if (activeTalker) {
+                              const url = mediaApi.getExportVoicesUrl(activeTalker, displayName)
+                              window.open(url, '_blank')
+                              toast.success("语音导出已开始，请稍候...")
+                            }
+                            setShowMoreMenu(false)
+                          }}
+                        >
+                          <Mic className="w-4 h-4" />
+                          导出语音
+                        </button>
+
+                        <div className="border-t my-1" />
+                        {/* 其他 */}
+                        <div className="px-3 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">其他</div>
+                        <button
+                          className="w-full px-3 py-2 text-sm text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
+                          onClick={() => { handleSync(); setShowMoreMenu(false) }}
+                          disabled={isSyncing}
+                        >
+                          <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+                          {isSyncing ? '正在同步...' : '同步数据'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 import {
   MessageSquare, RefreshCw, Moon, Sun, Monitor, Search, Key,
   ImageIcon, BarChart3, Sparkles, Users, Settings, Shield,
-  ChevronDown, CalendarDays, Heart, Cloud, BrainCircuit, PlayCircle,
+  ChevronDown, CalendarDays, Heart, Cloud, BrainCircuit, PlayCircle, Clock,
 } from "lucide-react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useState, useEffect } from "react"
@@ -43,6 +43,7 @@ export function Sidebar() {
   const navEntries: NavEntry[] = [
     { key: 'chat', icon: MessageSquare, label: '聊天', path: '/chat' },
     { key: 'contacts', icon: Users, label: '联系人', path: '/contacts' },
+    { key: 'contact-reminder', icon: Clock, label: '联系提醒', path: '/contact-reminder' },
     { key: 'gallery', icon: ImageIcon, label: '图片', path: '/gallery' },
     {
       key: 'analysis',
@@ -118,10 +119,11 @@ export function Sidebar() {
     try {
       setIsSyncing(true)
       await systemApi.triggerSync()
-      toast.info("同步已启动，请稍候...")
+      toast.info("正在同步数据，数据量较大时可能需要几分钟，请耐心等待...")
 
-      // Poll sync status every 1 second, max 60 times (60s timeout)
-      const MAX_POLLS = 60
+      // Poll sync status every 2 seconds, max 150 times (5 min timeout)
+      const MAX_POLLS = 150
+      const POLL_INTERVAL = 2000
       let pollCount = 0
 
       const pollTimer = setInterval(async () => {
@@ -136,7 +138,7 @@ export function Sidebar() {
               toast.success("数据同步成功！")
               window.location.reload()
             } else {
-              toast.error("同步失败，请检查日志。")
+              toast.error("同步失败: " + (status.last_sync_status || "未知错误"))
             }
             return
           }
@@ -144,14 +146,14 @@ export function Sidebar() {
           if (pollCount >= MAX_POLLS) {
             clearInterval(pollTimer)
             setIsSyncing(false)
-            toast.error("同步超时，请稍后重试或检查日志。")
+            toast.error("同步超时（已等待5分钟），请稍后重试或检查日志。")
           }
         } catch {
           clearInterval(pollTimer)
           setIsSyncing(false)
           toast.error("获取同步状态失败。")
         }
-      }, 1000)
+      }, POLL_INTERVAL)
     } catch (error: any) {
       console.error("Sync trigger failed:", error)
       const message = error.message || "启动同步失败，请检查日志。"

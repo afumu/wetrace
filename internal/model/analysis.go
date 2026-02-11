@@ -141,3 +141,12 @@ type DayCount struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
 }
+
+// NeedContactItem 需要联系的客户项
+type NeedContactItem struct {
+	UserName         string `json:"userName"`
+	NickName         string `json:"nickName"`
+	Remark           string `json:"remark"`
+	LastContactTime  int64  `json:"lastContactTime"`
+	DaysSinceContact int    `json:"daysSinceContact"`
+}

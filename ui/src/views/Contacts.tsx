@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { contactApi } from "@/api"
+import { contactApi, mediaApi } from "@/api"
 import type { Contact } from "@/types"
 import { ContactType } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card } from "@/components/ui/card"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -209,6 +210,8 @@ function ContactList({
 
 function ContactCard({ contact }: { contact: Contact }) {
   const displayName = contact.remark || contact.nickname || contact.wxid
+  const firstChar = (contact.nickname || contact.remark || contact.wxid || "?").charAt(0)
+  const avatarUrl = mediaApi.getAvatarUrl(`avatar/${contact.wxid}`)
   const typeConfig =
     contact.type === "chatroom"
       ? { label: "群聊", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" }
@@ -219,9 +222,10 @@ function ContactCard({ contact }: { contact: Contact }) {
   return (
     <Card className="overflow-hidden border-none shadow-sm bg-card hover:shadow-md hover:ring-1 hover:ring-primary/20 transition-all">
       <div className="p-4 flex items-center gap-3">
-        <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
-          <Users className="w-5 h-5 text-muted-foreground/50" />
-        </div>
+        <Avatar className="w-10 h-10 flex-shrink-0">
+              <AvatarImage src={avatarUrl} alt={displayName} />
+              <AvatarFallback className="text-sm font-medium">{firstChar}</AvatarFallback>
+            </Avatar>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium truncate">{displayName}</span>

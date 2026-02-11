@@ -66,6 +66,19 @@ export const mediaApi = {
       items: ImageListItem[];
     }>('/api/v1/media/images', params)
   },
+
+  transcribeVoice: (id: string) => {
+    return request.post<{ text: string }>('/api/v1/media/voice/transcribe', { id })
+  },
+
+  getExportVoicesUrl: (talker: string, name?: string): string => {
+    const baseURL = getApiBaseUrl()
+    let url = `${baseURL}/api/v1/export/voices?talker=${encodeURIComponent(talker)}`
+    if (name) {
+      url += `&name=${encodeURIComponent(name)}`
+    }
+    return url
+  },
 }
 
 export interface ImageListItem {

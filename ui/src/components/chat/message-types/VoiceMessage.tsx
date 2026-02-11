@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { mediaApi } from "@/api/media"
 import { cn } from "@/lib/utils"
+import { Loader2, Type } from "lucide-react"
 
 interface VoiceMessageProps {
   id: string
@@ -10,9 +11,11 @@ interface VoiceMessageProps {
 
 export function VoiceMessage({ id, isSelf, duration }: VoiceMessageProps) {
   const [isPlaying, setIsPlaying] = useState(false)
-  const [animationStep, setAnimationStep] = useState(3) // 3 means full visible (static state)
+  const [animationStep, setAnimationStep] = useState(3)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const animationIntervalRef = useRef<number | null>(null)
+  const [transcribeText, setTranscribeText] = useState<string | null>(null)
+  const [isTranscribing, setIsTranscribing] = useState(false)
 
   const voiceUrl = mediaApi.getVoiceUrl(id)
   
@@ -84,34 +87,76 @@ export function VoiceMessage({ id, isSelf, duration }: VoiceMessageProps) {
     }
   }
 
+  const handleTranscribe = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isTranscribing || transcribeText !== null) return
+    setIsTranscribing(true)
+    try {
+      const res = await mediaApi.transcribeVoice(id)
+      setTranscribeText(res.text || "(无识别结果)")
+    } catch (err: any) {
+      setTranscribeText("转文字失败: " + (err?.message || "未知错误"))
+    } finally {
+      setIsTranscribing(false)
+    }
+  }
+
   // Calculate width. Base 60px, + px per second. Max 200px.
   // WeChat logic roughly: min 40px, max ~160px.
   const width = Math.min(200, Math.max(70, 70 + (displayDuration * 5)))
 
   return (
-    <div 
-      className={cn(
-        "flex items-center gap-2 py-1 px-3 cursor-pointer select-none transition-all rounded-md hover:bg-black/5 dark:hover:bg-white/5", 
-        isSelf ? "flex-row-reverse" : "flex-row"
-      )}
-      style={{ width: duration ? `${width}px` : 'auto' }}
-      onClick={(e) => {
-        e.stopPropagation()
-        togglePlay()
-      }}
-    >
-      {/* Icon */}
-      <div className={cn(
-        "shrink-0 flex items-center justify-center w-5 h-5",
-        isSelf ? "rotate-180" : "" 
-      )}>
-        <VoiceIcon step={animationStep} />
+    <div className="flex flex-col gap-1">
+      <div
+        className={cn(
+          "flex items-center gap-2 py-1 px-3 cursor-pointer select-none transition-all rounded-md hover:bg-black/5 dark:hover:bg-white/5",
+          isSelf ? "flex-row-reverse" : "flex-row"
+        )}
+        style={{ width: duration ? `${width}px` : 'auto' }}
+        onClick={(e) => {
+          e.stopPropagation()
+          togglePlay()
+        }}
+      >
+        {/* Icon */}
+        <div className={cn(
+          "shrink-0 flex items-center justify-center w-5 h-5",
+          isSelf ? "rotate-180" : ""
+        )}>
+          <VoiceIcon step={animationStep} />
+        </div>
+
+        {/* Duration */}
+        <span className="text-sm text-foreground/80 min-w-[16px] text-center">
+          {displayDuration}"
+        </span>
+
+        {/* Transcribe button */}
+        {transcribeText === null && (
+          <button
+            className="shrink-0 ml-1 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={handleTranscribe}
+            disabled={isTranscribing}
+            title="转文字"
+          >
+            {isTranscribing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Type className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Duration */}
-      <span className="text-sm text-foreground/80 min-w-[16px] text-center">
-        {displayDuration}"
-      </span>
+      {/* Transcribed text */}
+      {transcribeText !== null && (
+        <div className={cn(
+          "text-xs text-foreground/70 px-3 py-1 max-w-[240px]",
+          isSelf ? "text-right" : "text-left"
+        )}>
+          {transcribeText}
+        </div>
+      )}
     </div>
   )
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/afumu/wetrace/internal/backup"
 	"github.com/afumu/wetrace/internal/monitor"
 	"github.com/afumu/wetrace/internal/replay"
+	"github.com/afumu/wetrace/internal/tts"
 	intsync "github.com/afumu/wetrace/internal/sync"
 	"github.com/afumu/wetrace/store"
 	"github.com/afumu/wetrace/store/types"
@@ -34,6 +35,8 @@ type API struct {
 	BackupScheduler *backup.Scheduler
 	ReplayExporter  *replay.Exporter
 	Monitor         *monitor.Store
+	MonitorChecker  *monitor.Checker
+	TTS             *tts.Client
 	mu              sync.Mutex
 }
 
@@ -132,6 +135,19 @@ func NewAPI(s store.Store, m *media.Service, conf *Config, staticFS fs.FS) *API 
 	monitorStore, err := monitor.NewStore(monitorDir)
 	if err == nil {
 		a.Monitor = monitorStore
+		// Initialize monitor checker
+		a.MonitorChecker = monitor.NewChecker(s, monitorStore, aiClient)
+		a.MonitorChecker.Start()
+	}
+
+	// Initialize TTS client from viper config
+	if viper.GetBool("TTS_ENABLED") {
+		ttsKey := viper.GetString("TTS_API_KEY")
+		ttsURL := viper.GetString("TTS_BASE_URL")
+		ttsModel := viper.GetString("TTS_MODEL")
+		if ttsKey != "" && ttsURL != "" {
+			a.TTS = tts.NewClient(ttsKey, ttsURL, ttsModel)
+		}
 	}
 
 	return a

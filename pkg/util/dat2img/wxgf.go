@@ -35,6 +35,8 @@ func init() {
 			FFMpegPath = filepath.Join("ffmpeg", "ffmpeg")
 		} else if _, err := os.Stat(filepath.Join("ffmpeg", "ffmpeg.exe")); err == nil {
 			FFMpegPath = filepath.Join("ffmpeg", "ffmpeg.exe")
+		} else if _, err := os.Stat(filepath.Join("ffmepg", "ffmepg.exe")); err == nil {
+			FFMpegPath = filepath.Join("ffmepg", "ffmepg.exe")
 		}
 	}
 	if isFFmpegAvailable() {

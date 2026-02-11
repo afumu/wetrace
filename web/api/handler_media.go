@@ -1,6 +1,8 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/md5"
 	"fmt"
 	"net/url"
@@ -114,6 +116,7 @@ type imageListItem struct {
 	TalkerName   string `json:"talkerName"`
 	Time         string `json:"time"`
 	ThumbnailURL string `json:"thumbnailUrl"`
+	FullURL      string `json:"fullUrl"`
 	Seq          int64  `json:"seq"`
 }
 
@@ -165,12 +168,23 @@ func (a *API) GetImageList(c *gin.Context) {
 			continue
 		}
 
+		path := ""
+		if msg.Contents != nil {
+			if p, ok := msg.Contents["path"].(string); ok {
+				path = p
+			}
+		}
+		thumbnailURL := fmt.Sprintf("/api/v1/media/image/%s?thumb=1", key)
+		if path != "" {
+			thumbnailURL += "&path=" + url.QueryEscape(path)
+		}
+
 		item := &imageListItem{
 			Key:          key,
 			Talker:       msg.Talker,
 			TalkerName:   msg.TalkerName,
 			Time:         msg.Time.Format(time.RFC3339),
-			ThumbnailURL: fmt.Sprintf("/api/v1/media/image/%s?thumb=1", key),
+			ThumbnailURL: thumbnailURL,
 			Seq:          msg.Seq,
 		}
 		allItems = append(allItems, item)
@@ -359,4 +373,170 @@ func (a *API) buildCacheImageItem(path, cacheBaseDir string, info os.FileInfo) *
 // md5Sum 计算字节数组的 MD5 哈希值。
 func md5Sum(data []byte) [16]byte {
 	return md5.Sum(data)
+}
+
+// TranscribeVoice 语音转文字
+func (a *API) TranscribeVoice(c *gin.Context) {
+	if a.TTS == nil {
+		transport.BadRequest(c, "语音转文字功能未启用，请先在设置中配置")
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, "参数错误")
+		return
+	}
+	if req.ID == "" {
+		transport.BadRequest(c, "语音ID不能为空")
+		return
+	}
+
+	// 获取语音媒体信息
+	mediaInfo, err := a.Store.GetMedia(c.Request.Context(), "voice", req.ID)
+	if err != nil {
+		transport.NotFound(c, "未找到语音文件")
+		return
+	}
+
+	// 使用媒体服务准备语音内容
+	prepared := a.Media.Prepare(mediaInfo, false)
+	if prepared.Error != nil || len(prepared.Content) == 0 {
+		transport.InternalServerError(c, "无法读取语音文件")
+		return
+	}
+
+	// 调用 Whisper API 转文字
+	text, err := a.TTS.Transcribe(prepared.Content, "voice.mp3")
+	if err != nil {
+		log.Error().Err(err).Str("id", req.ID).Msg("语音转文字失败")
+		transport.InternalServerError(c, "语音转文字失败: "+err.Error())
+		return
+	}
+
+	transport.SendSuccess(c, gin.H{"text": text})
+}
+
+// ExportVoices 一键导出会话中的所有语音消息为 ZIP 包（每条语音为独立 MP3 文件）
+func (a *API) ExportVoices(c *gin.Context) {
+	talker := c.Query("talker")
+	if talker == "" {
+		transport.BadRequest(c, "talker 参数不能为空")
+		return
+	}
+	name := c.Query("name")
+	if name == "" {
+		name = talker
+	}
+
+	// 查询该会话的所有语音消息
+	msgQuery := types.MessageQuery{
+		Talker:  talker,
+		MsgType: model.MessageTypeVoice,
+		Limit:   100000,
+		Offset:  0,
+	}
+
+	messages, err := a.Store.GetMessages(c.Request.Context(), msgQuery)
+	if err != nil {
+		log.Error().Err(err).Str("talker", talker).Msg("查询语音消息失败")
+		transport.InternalServerError(c, "查询语音消息失败")
+		return
+	}
+
+	if len(messages) == 0 {
+		transport.BadRequest(c, "该会话没有语音消息")
+		return
+	}
+
+	// 创建 ZIP 缓冲区
+	var buf bytes.Buffer
+	zipWriter := zip.NewWriter(&buf)
+
+	voiceCount := 0
+	for i, msg := range messages {
+		// 获取语音 key
+		voiceKey := ""
+		if msg.Contents != nil {
+			if v, ok := msg.Contents["voice"]; ok {
+				voiceKey = fmt.Sprint(v)
+			}
+		}
+		if voiceKey == "" {
+			continue
+		}
+
+		// 从 store 获取语音媒体数据
+		mediaInfo, err := a.Store.GetMedia(c.Request.Context(), "voice", voiceKey)
+		if err != nil {
+			log.Warn().Err(err).Str("key", voiceKey).Msg("获取语音媒体失败，跳过")
+			continue
+		}
+
+		// 使用媒体服务解码语音
+		prepared := a.Media.Prepare(mediaInfo, false)
+		if prepared.Error != nil || len(prepared.Content) == 0 {
+			log.Warn().Str("key", voiceKey).Msg("语音解码失败或为空，跳过")
+			continue
+		}
+
+		// 确定文件扩展名
+		ext := ".mp3"
+		if prepared.ContentType == "audio/silk" {
+			ext = ".silk"
+		}
+
+		// 构造文件名：序号_发送者_时间.mp3
+		timeStr := msg.Time.Format("20060102_150405")
+		senderName := msg.SenderName
+		if senderName == "" {
+			senderName = msg.Sender
+		}
+		// 清理文件名中的非法字符
+		senderName = sanitizeFileName(senderName)
+		fileName := fmt.Sprintf("%03d_%s_%s%s", i+1, senderName, timeStr, ext)
+
+		// 写入 ZIP
+		w, err := zipWriter.Create(fileName)
+		if err != nil {
+			log.Warn().Err(err).Str("file", fileName).Msg("创建 ZIP 条目失败")
+			continue
+		}
+		if _, err := w.Write(prepared.Content); err != nil {
+			log.Warn().Err(err).Str("file", fileName).Msg("写入 ZIP 条目失败")
+			continue
+		}
+		voiceCount++
+	}
+
+	if err := zipWriter.Close(); err != nil {
+		transport.InternalServerError(c, "生成 ZIP 文件失败")
+		return
+	}
+
+	if voiceCount == 0 {
+		transport.BadRequest(c, "没有可导出的语音文件")
+		return
+	}
+
+	// 设置响应头并发送 ZIP
+	zipName := fmt.Sprintf("voices_%s_%s.zip", sanitizeFileName(name), time.Now().Format("20060102"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipName))
+	c.Header("Content-Type", "application/zip")
+	c.Data(200, "application/zip", buf.Bytes())
+}
+
+// sanitizeFileName 清理文件名中的非法字符
+func sanitizeFileName(name string) string {
+	replacer := strings.NewReplacer(
+		"/", "_", "\\", "_", ":", "_", "*", "_",
+		"?", "_", "\"", "_", "<", "_", ">", "_", "|", "_",
+	)
+	result := replacer.Replace(name)
+	if len(result) > 50 {
+		result = result[:50]
+	}
+	return result
 }

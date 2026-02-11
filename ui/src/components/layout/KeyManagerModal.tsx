@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { X, Key, Image as ImageIcon, Copy, Check, Loader2, AlertCircle, FolderSearch } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +22,58 @@ export function KeyManagerModal({ onClose }: Props) {
   const [copied, setCopied] = useState<string | null>(null)
 
   const isInitialMount = useRef(true)
+  const dbAbortRef = useRef<AbortController | null>(null)
+  const imageAbortRef = useRef<AbortController | null>(null)
+  const [dbCountdown, setDbCountdown] = useState<number>(0)
+  const [imageCountdown, setImageCountdown] = useState<number>(0)
+  const dbTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const imageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Cleanup timers and abort controllers on unmount
+  useEffect(() => {
+    return () => {
+      if (dbTimerRef.current) clearInterval(dbTimerRef.current)
+      if (imageTimerRef.current) clearInterval(imageTimerRef.current)
+      if (dbAbortRef.current) dbAbortRef.current.abort()
+      if (imageAbortRef.current) imageAbortRef.current.abort()
+    }
+  }, [])
+
+  const startCountdown = useCallback((
+    type: 'db' | 'image',
+    seconds: number,
+  ) => {
+    const setCountdown = type === 'db' ? setDbCountdown : setImageCountdown
+    const timerRef = type === 'db' ? dbTimerRef : imageTimerRef
+
+    if (timerRef.current) clearInterval(timerRef.current)
+    setCountdown(seconds)
+
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current)
+          timerRef.current = null
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }, [])
+
+  const stopCountdown = useCallback((type: 'db' | 'image') => {
+    const setCountdown = type === 'db' ? setDbCountdown : setImageCountdown
+    const timerRef = type === 'db' ? dbTimerRef : imageTimerRef
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = null
+    setCountdown(0)
+  }, [])
+
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
 
   // 初始化检查现有配置
   useEffect(() => {
@@ -76,44 +128,78 @@ export function KeyManagerModal({ onClose }: Props) {
   const handleGetDbKey = async () => {
     setLoading('db')
     setError(null)
+
+    // AbortController with 2-minute timeout
+    const abortCtrl = new AbortController()
+    dbAbortRef.current = abortCtrl
+    startCountdown('db', 120)
+
+    const timeoutId = setTimeout(() => {
+      abortCtrl.abort()
+    }, 120 * 1000)
+
     try {
-      const res: any = await systemApi.getWeChatDbKey()
+      const res: any = await systemApi.getWeChatDbKey({ signal: abortCtrl.signal })
       console.log('DB Key Response:', res)
-      
+
       const data = res?.data || res
-      
+
       if (data && data.key) {
         setDbKey(data.key)
       } else {
         setError("获取失败：响应中未包含密钥字段")
       }
     } catch (err: any) {
-      console.error('DB Key Error:', err)
-      setError(err.message || "请求失败")
+      if (err.name === 'AbortError' || abortCtrl.signal.aborted) {
+        setError("获取密钥超时（2分钟），请重试")
+      } else {
+        console.error('DB Key Error:', err)
+        setError(err.message || "请求失败")
+      }
     } finally {
+      clearTimeout(timeoutId)
+      stopCountdown('db')
       setLoading(null)
+      dbAbortRef.current = null
     }
   }
 
   const handleGetImageKey = async () => {
     setLoading('image')
     setError(null)
+
+    // AbortController with 2-minute timeout
+    const abortCtrl = new AbortController()
+    imageAbortRef.current = abortCtrl
+    startCountdown('image', 120)
+
+    const timeoutId = setTimeout(() => {
+      abortCtrl.abort()
+    }, 120 * 1000)
+
     try {
-      const res: any = await systemApi.getWeChatImageKey()
+      const res: any = await systemApi.getWeChatImageKey({ signal: abortCtrl.signal })
       console.log('Image Key Response:', res)
-      
+
       const data = res?.data || res
-      
+
       if (data && data.image_aes_key) {
         setImageKey({ xor: data.image_xor_key, aes: data.image_aes_key })
       } else {
         setError("获取失败：响应中未包含图片密钥数据")
       }
     } catch (err: any) {
-      console.error('Image Key Error:', err)
-      setError(err.message || "请求失败")
+      if (err.name === 'AbortError' || abortCtrl.signal.aborted) {
+        setError("获取图片密钥超时（2分钟），请重试")
+      } else {
+        console.error('Image Key Error:', err)
+        setError(err.message || "请求失败")
+      }
     } finally {
+      clearTimeout(timeoutId)
+      stopCountdown('image')
       setLoading(null)
+      imageAbortRef.current = null
     }
   }
 
@@ -338,16 +424,16 @@ export function KeyManagerModal({ onClose }: Props) {
                 <Key className="w-4 h-4 text-blue-500" />
                 数据库解密密钥
               </h4>
-              <Button 
-                size="sm" 
-                onClick={handleGetDbKey} 
+              <Button
+                size="sm"
+                onClick={handleGetDbKey}
                 disabled={!!loading}
                 className="rounded-full h-8 px-4"
               >
                 {loading === 'db' ? (
                   <>
                     <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                    正在获取...
+                    {dbCountdown > 0 ? `获取中 ${formatCountdown(dbCountdown)}` : '正在获取...'}
                   </>
                 ) : (dbKey ? "重新获取" : "点击获取")}
               </Button>
@@ -384,17 +470,17 @@ export function KeyManagerModal({ onClose }: Props) {
                 <ImageIcon className="w-4 h-4 text-emerald-500" />
                 图片查看密钥
               </h4>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
-                onClick={handleGetImageKey} 
+                onClick={handleGetImageKey}
                 disabled={!!loading}
                 className="rounded-full h-8 px-4"
               >
                 {loading === 'image' ? (
                   <>
                     <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                    扫描中...
+                    {imageCountdown > 0 ? `扫描中 ${formatCountdown(imageCountdown)}` : '扫描中...'}
                   </>
                 ) : (imageKey ? "重新获取" : "点击获取")}
               </Button>

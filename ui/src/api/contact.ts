@@ -43,6 +43,14 @@ function transformContact(backendContact: BackendContact): Contact {
   }
 }
 
+export interface NeedContactItem {
+  userName: string
+  nickName: string
+  remark: string
+  lastContactTime: number
+  daysSinceContact: number
+}
+
 export const contactApi = {
   getContacts: async (params?: ContactParams): Promise<Contact[]> => {
     const response = await request.get<BackendContact[]>('/api/v1/contacts', params)
@@ -90,6 +98,14 @@ export const contactApi = {
     const params = new URLSearchParams({ format })
     if (keyword) params.set('keyword', keyword)
     return `${baseURL}/api/v1/contacts/export?${params.toString()}`
+  },
+
+  getNeedContactList: async (days: number = 7): Promise<NeedContactItem[]> => {
+    const response = await request.get<NeedContactItem[]>('/api/v1/contacts/need-contact', { days })
+    if (Array.isArray(response)) {
+      return response
+    }
+    return []
   },
 }
 

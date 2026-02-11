@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/afumu/wetrace/internal/ai"
+	"github.com/afumu/wetrace/internal/tts"
 	"github.com/afumu/wetrace/pkg/util"
 	"github.com/afumu/wetrace/web/transport"
 	"github.com/gin-gonic/gin"
@@ -539,4 +540,70 @@ func (a *API) AgreeCompliance(c *gin.Context) {
 	}
 
 	transport.SendSuccess(c, gin.H{"status": "agreed"})
+}
+
+// GetTTSConfig 获取语音转文字配置
+func (a *API) GetTTSConfig(c *gin.Context) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	masked := ""
+	key := viper.GetString("TTS_API_KEY")
+	if key != "" {
+		masked = maskAPIKey(key)
+	}
+
+	transport.SendSuccess(c, gin.H{
+		"enabled":        viper.GetBool("TTS_ENABLED"),
+		"provider":       viper.GetString("TTS_PROVIDER"),
+		"base_url":       viper.GetString("TTS_BASE_URL"),
+		"api_key_masked": masked,
+		"model":          viper.GetString("TTS_MODEL"),
+	})
+}
+
+// UpdateTTSConfig 更新语音转文字配置
+func (a *API) UpdateTTSConfig(c *gin.Context) {
+	var req struct {
+		Enabled  bool   `json:"enabled"`
+		Provider string `json:"provider"`
+		BaseURL  string `json:"base_url"`
+		APIKey   string `json:"api_key"`
+		Model    string `json:"model"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		transport.BadRequest(c, "参数错误")
+		return
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	viper.Set("TTS_ENABLED", req.Enabled)
+	viper.Set("TTS_PROVIDER", req.Provider)
+	viper.Set("TTS_BASE_URL", req.BaseURL)
+	if req.APIKey != "" {
+		viper.Set("TTS_API_KEY", req.APIKey)
+	}
+	viper.Set("TTS_MODEL", req.Model)
+
+	if err := viper.WriteConfig(); err != nil {
+		transport.InternalServerError(c, "保存配置失败: "+err.Error())
+		return
+	}
+
+	// 重建 TTS 客户端
+	if req.Enabled {
+		apiKey := req.APIKey
+		if apiKey == "" {
+			apiKey = viper.GetString("TTS_API_KEY")
+		}
+		if apiKey != "" && req.BaseURL != "" {
+			a.TTS = tts.NewClient(apiKey, req.BaseURL, req.Model)
+		}
+	} else {
+		a.TTS = nil
+	}
+
+	transport.SendSuccess(c, gin.H{"status": "ok"})
 }

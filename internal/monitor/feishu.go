@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -148,4 +150,165 @@ func TestFeishuBot(webhookURL, secret string) error {
 		},
 	}
 	return sendFeishuRequest(webhookURL, secret, card)
+}
+
+// --- 飞书多维表格（Bitable）推送 ---
+
+// tenantTokenCache 缓存 tenant_access_token
+var tenantTokenCache struct {
+	sync.RWMutex
+	token   string
+	expires time.Time
+}
+
+// getTenantAccessToken 获取飞书 tenant_access_token
+func getTenantAccessToken(appID, appSecret string) (string, error) {
+	tenantTokenCache.RLock()
+	if tenantTokenCache.token != "" && time.Now().Before(tenantTokenCache.expires) {
+		token := tenantTokenCache.token
+		tenantTokenCache.RUnlock()
+		return token, nil
+	}
+	tenantTokenCache.RUnlock()
+
+	body := map[string]string{
+		"app_id":     appID,
+		"app_secret": appSecret,
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("marshal token request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(
+		"https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+		"application/json; charset=utf-8",
+		bytes.NewReader(data),
+	)
+	if err != nil {
+		return "", fmt.Errorf("request tenant_access_token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read token response: %w", err)
+	}
+
+	var result struct {
+		Code              int    `json:"code"`
+		Msg               string `json:"msg"`
+		TenantAccessToken string `json:"tenant_access_token"`
+		Expire            int    `json:"expire"`
+	}
+	if err := json.Unmarshal(respData, &result); err != nil {
+		return "", fmt.Errorf("unmarshal token response: %w", err)
+	}
+	if result.Code != 0 {
+		return "", fmt.Errorf("get tenant_access_token failed: code=%d, msg=%s", result.Code, result.Msg)
+	}
+
+	tenantTokenCache.Lock()
+	tenantTokenCache.token = result.TenantAccessToken
+	tenantTokenCache.expires = time.Now().Add(time.Duration(result.Expire-60) * time.Second)
+	tenantTokenCache.Unlock()
+
+	return result.TenantAccessToken, nil
+}
+
+// SendBitableRecord 写入飞书多维表格记录
+func SendBitableRecord(appID, appSecret, appToken, tableID string, msg WebhookMessage, ruleName string) error {
+	token, err := getTenantAccessToken(appID, appSecret)
+	if err != nil {
+		return fmt.Errorf("get access token: %w", err)
+	}
+
+	fields := map[string]interface{}{
+		"发送人":  msg.SenderName,
+		"会话":   msg.TalkerName,
+		"消息内容": msg.Content,
+		"触发规则": ruleName,
+		"消息时间": msg.Time,
+		"告警时间": time.Now().Format("2006-01-02 15:04:05"),
+	}
+
+	reqBody := map[string]interface{}{
+		"fields": fields,
+	}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshal bitable record: %w", err)
+	}
+
+	url := fmt.Sprintf("https://open.feishu.cn/open-apis/bitable/v1/apps/%s/tables/%s/records", appToken, tableID)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("create bitable request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send bitable record: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read bitable response: %w", err)
+	}
+
+	var result struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(respData, &result); err != nil {
+		return fmt.Errorf("unmarshal bitable response: %w", err)
+	}
+	if result.Code != 0 {
+		return fmt.Errorf("bitable write failed: code=%d, msg=%s", result.Code, result.Msg)
+	}
+	return nil
+}
+
+// TestBitableConnection 测试飞书多维表格连通性
+func TestBitableConnection(appID, appSecret, appToken, tableID string) error {
+	token, err := getTenantAccessToken(appID, appSecret)
+	if err != nil {
+		return fmt.Errorf("get access token: %w", err)
+	}
+
+	url := fmt.Sprintf("https://open.feishu.cn/open-apis/bitable/v1/apps/%s/tables/%s/records?page_size=1", appToken, tableID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("create test request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("test bitable connection: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read test response: %w", err)
+	}
+
+	var result struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(respData, &result); err != nil {
+		return fmt.Errorf("unmarshal test response: %w", err)
+	}
+	if result.Code != 0 {
+		return fmt.Errorf("bitable test failed: code=%d, msg=%s", result.Code, result.Msg)
+	}
+	return nil
 }

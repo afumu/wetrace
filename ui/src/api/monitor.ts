@@ -10,6 +10,9 @@ export interface MonitorConfig {
   webhook_url: string
   feishu_url: string
   enabled: boolean
+  session_ids: string[]
+  interval_minutes: number
+  last_check_time: number
   created_at: number
   updated_at: number
 }
@@ -23,18 +26,30 @@ export interface MonitorConfigCreate {
   webhook_url?: string
   feishu_url?: string
   enabled: boolean
+  session_ids?: string[]
+  interval_minutes?: number
 }
 
 export interface FeishuConfig {
   bot_webhook: string
   sign_secret: string
   enabled: boolean
+  app_id: string
+  app_secret: string
+  app_token: string
+  table_id: string
+  push_type: "bot" | "bitable" | "both"
 }
 
 export interface FeishuConfigUpdate {
   bot_webhook: string
   sign_secret?: string
   enabled: boolean
+  app_id?: string
+  app_secret?: string
+  app_token?: string
+  table_id?: string
+  push_type?: "bot" | "bitable" | "both"
 }
 
 export const monitorApi = {
@@ -63,4 +78,7 @@ export const monitorApi = {
 
   testFeishu: () =>
     request.post<{ status: string; message: string }>("/api/v1/feishu/test"),
+
+  testFeishuBitable: () =>
+    request.post<{ status: string; message: string }>("/api/v1/feishu/test_bitable"),
 }

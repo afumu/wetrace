@@ -104,14 +104,26 @@ func (s *Scheduler) startTicker() {
 	log.Info().Int("interval_minutes", s.intervalMin).Msg("auto sync scheduler started")
 }
 
+// StartSync marks the scheduler as syncing and returns true if successful.
+// Call this before launching RunSync in a goroutine to avoid race conditions
+// where a status poll arrives before RunSync has set isSyncing = true.
+func (s *Scheduler) StartSync() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.isSyncing {
+		return false
+	}
+	s.isSyncing = true
+	return true
+}
+
 // RunSync executes a sync operation. Safe to call concurrently.
 func (s *Scheduler) RunSync() {
 	s.mu.Lock()
-	if s.isSyncing {
-		s.mu.Unlock()
-		return
+	if !s.isSyncing {
+		// Not pre-started via StartSync, set it now
+		s.isSyncing = true
 	}
-	s.isSyncing = true
 	s.mu.Unlock()
 
 	log.Info().Msg("sync started")
