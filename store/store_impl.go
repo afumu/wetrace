@@ -156,6 +156,10 @@ func (s *DefaultStore) Watch(group string, callback func(event fsnotify.Event) e
 	return nil
 }
 
+func (s *DefaultStore) GetNeedContactList(ctx context.Context, days int) ([]*model.NeedContactItem, error) {
+	return s.repo.GetNeedContactList(ctx, days)
+}
+
 // Reload 重新加载存储（重建索引、刷新连接等）
 func (s *DefaultStore) Reload() error {
 	// 1. 关闭所有现有连接（这将强制下次查询时重新打开连接）
